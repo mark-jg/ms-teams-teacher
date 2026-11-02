@@ -14,6 +14,7 @@ TT.register({
     this._filter.periode = TT.settings.opdrachten.periode || "schooljaar";
     chrome.storage.local.get(["ttData", "ttFilter"]).then(({ ttData, ttFilter }) => {
       if (ttFilter) Object.assign(this._filter, { periode: ttFilter.periode || this._filter.periode, klassen: ttFilter.klassen ? new Set(ttFilter.klassen) : null, auto: ttFilter.auto !== false });
+      chrome.storage.local.get("ttSorteer").then(({ ttSorteer }) => { if (ttSorteer) this._sorteer = ttSorteer; }).catch(() => {});
       if (ttData?.classes) { this._data = this.migreer(ttData); this.renderWidget(TT); }
     });
   },
@@ -650,6 +651,21 @@ TT.register({
     const gemChip = (v) => v == null ? chip("geen cijfers", "") : chip(`gem. ${P(v)}`, v < 0.55 ? "bad" : v < 0.7 ? "warn" : "ok");
     return { P, D, chip, chips, balk, kop, sectie, rij, leeg, kruimels, gemChip };
   },
+  /* Sorteerbalk boven een lijst. opties: [{ k, l, f(x) → waarde, desc }]; de keuze wordt per lijst onthouden. */
+  _sorteer: {},
+  sorteer(TT, id, items, opties, standaard) {
+    const keuze = this._sorteer[id] || standaard || opties[0].k;
+    const o = opties.find((x) => x.k === keuze) || opties[0];
+    const val = (x) => { const v = o.f(x); return v == null || v === "" ? null : v; };
+    const gesorteerd = [...items].sort((a, b) => {
+      const va = val(a), vb = val(b);
+      if (va == null && vb == null) return 0; if (va == null) return 1; if (vb == null) return -1;
+      const r = typeof va === "number" ? va - vb : String(va).localeCompare(String(vb), "nl", { numeric: true });
+      return o.desc ? -r : r;
+    });
+    const balk = TT.el("div", { class: "tt-sorteer", role: "group", "aria-label": "Sorteren" }, [TT.el("span", { class: "tt-muted", text: "Sorteer op" }), ...opties.map((x) => TT.el("button", { class: "tt-sorteer-knop" + (x.k === o.k ? " is-on" : ""), "aria-pressed": String(x.k === o.k), text: x.l, onclick: () => TT.guard(() => { this._sorteer[id] = x.k; this.renderBody(TT); try { chrome.storage.local.set({ ttSorteer: this._sorteer }); } catch {} }, "Sorteren") }))]);
+    return { balk, items: gesorteerd };
+  },
   vakVan(TT, teamNaam) { let re = null; try { re = new RegExp(this.patroon(TT), "i"); } catch {} const m = re && re.exec(teamNaam || ""); const rest = m ? teamNaam.slice(m.index + m[0].length).trim() : teamNaam; return rest || teamNaam; },
 
   _renderBody(TT) {
@@ -657,6 +673,11 @@ TT.register({
     const ko = this.klasOverzicht(TT, r);
     const pg = this._pagina;
     const gemVan = (uid, tid) => { const c = C.leerlingen.find((x) => x.id === uid); return tid ? c?.teams[tid]?.eind ?? null : c?.totaal ?? null; };
+    // Sorteeropties voor leerlingenlijsten (x.l = leerling, x.k = de teller die telt: totaal of per team).
+    const lnOpties = (tid) => [
+      { k: "naam", l: "Naam", f: (x) => x.l.naam }, { k: "activiteit", l: "Activiteit", f: (x) => x.k.laatste || 0, desc: true },
+      { k: "gemiddeld", l: "Gemiddelde", f: (x) => gemVan(x.l.id, tid), desc: true }, { k: "ontbreekt", l: "Ontbreekt", f: (x) => x.k.ontbreekt + x.k.teLaat * 0.01, desc: true }, { k: "teLaat", l: "Te laat", f: (x) => x.k.teLaat, desc: true }
+    ];
     const start = { l: "Overzicht", p: { type: "home" } };
     let out = [];
 
@@ -680,16 +701,19 @@ TT.register({
       const k = ko.find((x) => x.naam === pg.id), g = K.klassen.find((x) => x.naam === pg.id);
       if (!k || !g) out = [U.kruimels([start, { l: pg.id }]), U.leeg("Deze klas staat niet (meer) in de selectie.")];
       else {
-        const lln = r.leerlingen.filter((l) => l.klas === pg.id).sort((a, b) => (b.ontbreekt + b.teLaat) - (a.ontbreekt + a.teLaat) || a.naam.localeCompare(b.naam, "nl"));
-        const teams = g.teams.map((t) => r.klassen.find((x) => x.id === t.id)).filter(Boolean).sort((a, b) => this.vakVan(TT, a.naam).localeCompare(this.vakVan(TT, b.naam), "nl"));
+        const lS = this.sorteer(TT, "klas-leerlingen", r.leerlingen.filter((l) => l.klas === pg.id).map((l) => ({ l, k: l })), lnOpties(null), "naam");
+        const tS = this.sorteer(TT, "klas-vakken", g.teams.map((t) => r.klassen.find((x) => x.id === t.id)).filter(Boolean), [
+          { k: "naam", l: "Naam", f: (t) => this.vakVan(TT, t.naam) }, { k: "nakijken", l: "Na te kijken", f: (t) => t.nakijken, desc: true }, { k: "ontbreekt", l: "Ontbreekt", f: (t) => t.ontbreekt, desc: true }, { k: "ingeleverd", l: "Ingeleverd", f: (t) => t.pctIngeleverd }, { k: "gemiddeld", l: "Gemiddelde", f: (t) => t.gemiddeld, desc: true }
+        ], "naam");
+        const lln = lS.items.map((x) => x.l), teams = tS.items;
         const teamIds = new Set(teams.map((t) => t.id));
         const dls = r.deadlines.filter((o) => teamIds.has(o.klasId)).slice(0, 5);
         out = [U.kruimels([start, { l: pg.id }]),
           U.kop(pg.id, `${k.leerlingen} leerlingen · ${teams.length} vakken · ${k.toegewezen} opdrachten toegewezen`, [U.gemChip(k.gemiddeld), ...U.chips(k), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Rapporten", onclick: () => TT.guard(() => this.rapportDialoog(TT, pg.id), "Rapporten") })]),
           TT.el("div", { class: "tt-twee" }, [
-            U.sectie("Leerlingen", lln.length ? TT.el("div", { class: "tt-lijst" }, lln.map((l) => U.rij(l.naam, `${l.ingeleverd} van ${l.toegewezen} ingeleverd`, [U.gemChip(gemVan(l.id)), ...U.chips(l).slice(0, 2)], () => this.ga(TT, { type: "leerling", id: l.id })))) : U.leeg("Geen leerlingen."), "Gesorteerd op ontbrekend en te laat werk."),
+            U.sectie("Leerlingen", TT.el("div", {}, [lS.balk, lln.length ? TT.el("div", { class: "tt-lijst" }, lln.map((l) => U.rij(l.naam, `${l.ingeleverd} van ${l.toegewezen} ingeleverd${l.laatste ? " · laatst actief " + U.D(l.laatste) : ""}`, [U.gemChip(gemVan(l.id)), ...U.chips(l).slice(0, 2)], () => this.ga(TT, { type: "leerling", id: l.id })))) : U.leeg("Geen leerlingen.")])),
             TT.el("div", {}, [
-              U.sectie("Vakken", TT.el("div", { class: "tt-lijst" }, teams.map((t) => U.rij(this.vakVan(TT, t.naam), `${t.opdrachten} opdrachten · ${U.P(t.pctIngeleverd) || "–"} ingeleverd`, U.chips(t).slice(0, 2), () => this.ga(TT, { type: "team", id: t.id }))))),
+              U.sectie("Vakken", TT.el("div", {}, [tS.balk, TT.el("div", { class: "tt-lijst" }, teams.map((t) => U.rij(this.vakVan(TT, t.naam), `${t.opdrachten} opdrachten · ${U.P(t.pctIngeleverd) || "–"} ingeleverd`, U.chips(t).slice(0, 2), () => this.ga(TT, { type: "team", id: t.id }))))])),
               dls.length ? U.sectie("Komende deadlines", TT.el("div", { class: "tt-lijst" }, dls.map((o) => U.rij(o.naam, `${this.vakVan(TT, o.klas)} · ${U.D(o.due, { weekday: "short", day: "numeric", month: "short" })} · ${o.dagen <= 0 ? "vandaag" : o.dagen === 1 ? "morgen" : "over " + o.dagen + " dagen"}`, [U.chip(`${o.open} open`, o.open ? "warn" : "ok")], () => this.ga(TT, { type: "team", id: o.klasId }))))) : null
             ])
           ])];
@@ -701,8 +725,11 @@ TT.register({
       if (!t) out = [U.kruimels([start, { l: c?.displayName || "Vak" }]), U.leeg("Dit team heeft geen opdrachten in de gekozen periode.")];
       else {
         const vak = this.vakVan(TT, t.naam);
-        const ops = r.opdrachten.filter((o) => o.klasId === pg.id).sort((a, b) => (b.due || 0) - (a.due || 0));
-        const lln = r.leerlingen.filter((l) => l.perKlas.some((k) => k.klasId === pg.id)).map((l) => ({ l, k: l.perKlas.find((k) => k.klasId === pg.id) })).sort((a, b) => (b.k.ontbreekt + b.k.teLaat) - (a.k.ontbreekt + a.k.teLaat) || a.l.naam.localeCompare(b.l.naam, "nl"));
+        const oS = this.sorteer(TT, "team-opdrachten", r.opdrachten.filter((o) => o.klasId === pg.id), [
+          { k: "deadline", l: "Deadline", f: (o) => o.due || 0, desc: true }, { k: "naam", l: "Naam", f: (o) => o.naam }, { k: "nakijken", l: "Na te kijken", f: (o) => o.nakijken, desc: true }, { k: "ontbreekt", l: "Ontbreekt", f: (o) => o.ontbreekt, desc: true }, { k: "ingeleverd", l: "Ingeleverd", f: (o) => o.pctIngeleverd }
+        ], "deadline");
+        const lS = this.sorteer(TT, "team-leerlingen", r.leerlingen.filter((l) => l.perKlas.some((k) => k.klasId === pg.id)).map((l) => ({ l, k: l.perKlas.find((k) => k.klasId === pg.id) })), lnOpties(pg.id), "naam");
+        const ops = oS.items, lln = lS.items;
         const open = new Set();
         const opRij = (o) => {
           const key = "op:" + o.id;
@@ -718,8 +745,8 @@ TT.register({
         out = [U.kruimels([start, klasNaam ? { l: klasNaam, p: { type: "klas", id: klasNaam } } : null, { l: vak }].filter(Boolean)),
           U.kop(vak, `${t.naam} · ${t.leerlingen} leerlingen · ${t.opdrachten} opdrachten`, [U.gemChip(t.gemiddeld), ...U.chips(t)]),
           TT.el("div", { class: "tt-twee" }, [
-            U.sectie("Opdrachten", ops.length ? TT.el("div", { class: "tt-lijst" }, ops.map(opRij)) : U.leeg("Geen opdrachten in deze periode."), "Klik op een opdracht voor de stand per leerling."),
-            U.sectie("Leerlingen", TT.el("div", { class: "tt-lijst" }, lln.map(({ l, k }) => U.rij(l.naam, `${k.ingeleverd} van ${k.toegewezen} ingeleverd`, [U.gemChip(gemVan(l.id, pg.id)), ...U.chips(k).slice(0, 2)], () => this.ga(TT, { type: "leerling", id: l.id })))))
+            U.sectie("Opdrachten", TT.el("div", {}, [oS.balk, ops.length ? TT.el("div", { class: "tt-lijst" }, ops.map(opRij)) : U.leeg("Geen opdrachten in deze periode.")]), "Klik op een opdracht voor de stand per leerling."),
+            U.sectie("Leerlingen", TT.el("div", {}, [lS.balk, TT.el("div", { class: "tt-lijst" }, lln.map(({ l, k }) => U.rij(l.naam, `${k.ingeleverd} van ${k.toegewezen} ingeleverd${k.laatste ? " · laatst actief " + U.D(k.laatste) : ""}`, [U.gemChip(gemVan(l.id, pg.id)), ...U.chips(k).slice(0, 2)], () => this.ga(TT, { type: "leerling", id: l.id }))))]))
           ])];
       }
     } else if (pg.type === "leerling") {
@@ -729,32 +756,39 @@ TT.register({
         const prof = this._data.profielen?.[l.id] || Object.values(this._data.members || {}).flat().find((m) => m.id === l.id) || {};
         const nr = (/^(\d{4,10})@/.exec(prof.mail || prof.userPrincipalName || "") || [])[1] || "";
         const sig = r.signalen.find((x) => x.id === l.id);
-        const kaarten = l.perKlas.sort((a, b) => this.vakVan(TT, a.klas).localeCompare(this.vakVan(TT, b.klas), "nl")).map((k) => {
-          const key = "lk:" + k.klasId, gem = c?.teams[k.klasId], openK = this._open.has(key);
-          const kaart = TT.el("button", { class: "tt-kaart" + (openK ? " is-open" : ""), onclick: () => { openK ? this._open.delete(key) : this._open.add(key); this.renderBody(TT); } }, [
-            TT.el("b", { text: this.vakVan(TT, k.klas) }), TT.el("small", { text: gem?.n ? `${gem.n} ${gem.n === 1 ? "cijfer" : "cijfers"}${gem.gewogen != null ? " · gewogen" : ""}` : "nog geen cijfers" }),
-            TT.el("div", { class: "tt-groot" + (gem?.eind != null && gem.eind < 0.55 ? " tt-bad" : gem?.eind != null && gem.eind < 0.7 ? " tt-warnc" : ""), text: gem?.eind != null ? U.P(gem.eind) : "–" }),
-            TT.el("div", { class: "tt-row" }, [...U.chips(k), !k.ontbreekt && !k.teLaat ? U.chip(`${k.ingeleverd} van ${k.toegewezen} ingeleverd`, k.ingeleverd === k.toegewezen && k.toegewezen ? "ok" : "") : null].filter(Boolean))
-          ]);
-          if (!openK) return kaart;
+        const kleur = { ontbreekt: "bad", ingeleverd: "warn", nagekeken: "ok", teruggegeven: "warn" };
+        const vakRijen = l.perKlas.map((k) => ({ ...k, id: k.klasId, vak: this.vakVan(TT, k.klas), gem: c?.teams[k.klasId] || null, eind: c?.teams[k.klasId]?.eind ?? null, nCijfers: c?.teams[k.klasId]?.n || 0 }));
+        const vakDetail = (k) => {
           const ops = l.opdrachten.filter((o) => o.klasId === k.klasId);
-          const kleur = { ontbreekt: "bad", ingeleverd: "warn", nagekeken: "ok", teruggegeven: "warn" };
-          return TT.el("div", { class: "tt-kaart-open" }, [kaart, TT.el("div", { class: "tt-detail" }, [
-            gem?.categorieen?.length > 1 || (gem?.categorieen?.[0]?.gewicht != null) ? TT.el("div", { class: "tt-muted", style: "margin-bottom:6px", text: "Categorieën: " + gem.categorieen.map((x) => `${x.naam}${x.gewicht != null ? " " + x.gewicht + "%" : ""}: ${U.P(x.gemiddeld)} (${x.n})`).join(" · ") }) : null,
-            TT.el("div", { class: "tt-lijst tt-lijst-compact" }, ops.map((o) => U.rij(o.opdracht, `${o.due ? U.D(o.due) : ""}${o.ingeleverdOp ? " · ingeleverd " + U.D(o.ingeleverdOp) : ""}${o.teLaat ? " (te laat)" : ""}`, [U.chip(o.klasse, kleur[o.klasse] || ""), o.punten != null ? U.chip(`${o.punten}${o.max ? " / " + o.max : ""}`, o.pct != null && o.pct < 0.55 ? "bad" : "") : null].filter(Boolean), () => this.ga(TT, { type: "team", id: o.klasId }))))
-          ])]);
-        });
+          return TT.el("div", {}, [
+            TT.el("div", { class: "tt-row", style: "margin-bottom:6px" }, [
+              k.gem?.categorieen?.length ? TT.el("span", { class: "tt-muted", text: "Categorieën: " + k.gem.categorieen.map((x) => `${x.naam}${x.gewicht != null ? " " + x.gewicht + "%" : ""}: ${U.P(x.gemiddeld)} (${x.n})`).join(" · ") }) : null,
+              TT.el("button", { class: "tt-btn tt-btn-sm", text: "Naar het vak", onclick: () => this.ga(TT, { type: "team", id: k.klasId }) })
+            ]),
+            TT.el("div", { class: "tt-lijst tt-lijst-compact" }, ops.map((o) => U.rij(o.opdracht, `${o.due ? "deadline " + U.D(o.due) : ""}${o.ingeleverdOp ? " · ingeleverd " + U.D(o.ingeleverdOp) : ""}${o.teLaat ? " (te laat)" : ""}`, [U.chip(o.klasse, kleur[o.klasse] || ""), o.punten != null ? U.chip(`${o.punten}${o.max ? " / " + o.max : ""}`, o.pct != null && o.pct < 0.55 ? "bad" : "") : null].filter(Boolean), () => this.ga(TT, { type: "team", id: o.klasId }))))
+          ]);
+        };
+        const cel = (v) => (v == null ? { v: null, text: "–", cls: "tt-muted" } : { v, text: U.P(v), cls: v < 0.55 ? "tt-bad" : v < 0.7 ? "tt-warnc" : "" });
+        const vakTabel = this.table(TT, "leerling-vakken", [
+          { k: "vak", l: "Vak", cls: "tt-name", f: (k) => [k.vak, k.klas !== k.vak ? TT.el("span", { class: "tt-sub", text: k.klas }) : null] },
+          { k: "eind", l: "Gemiddelde", n: 1, f: (k) => cel(k.eind) }, { k: "nCijfers", l: "Cijfers", n: 1 },
+          { k: "ingeleverd", l: "Ingeleverd", n: 1, f: (k) => ({ v: k.ingeleverd, text: `${k.ingeleverd} / ${k.toegewezen}`, cls: "" }) },
+          { k: "ontbreekt", l: "Ontbreekt", n: 1, f: (k) => ({ v: k.ontbreekt, text: k.ontbreekt ? String(k.ontbreekt) : "", cls: k.ontbreekt ? "tt-bad" : "" }) },
+          { k: "teLaat", l: "Te laat", n: 1, f: (k) => ({ v: k.teLaat, text: k.teLaat ? String(k.teLaat) : "", cls: k.teLaat ? "tt-warnc" : "" }) },
+          { k: "nakijken", l: "Na te kijken", n: 1, f: (k) => ({ v: k.nakijken, text: k.nakijken ? String(k.nakijken) : "", cls: k.nakijken ? "tt-warnc" : "" }) },
+          { k: "laatste", l: "Laatste activiteit", f: (k) => U.D(k.laatste) }
+        ], vakRijen, vakDetail, { k: "vak", asc: true });
         const rub = this.rubrics(TT).rijen.filter((x) => x.gedeeld).map((rij) => ({ rij, n: TT_ANALYSE.rijNiveaus(this._data, rij, { klasVan: K.klasVan }).find((x) => x.id === l.id) })).filter((x) => x.n);
         out = [U.kruimels([start, l.klas ? { l: l.klas, p: { type: "klas", id: l.klas } } : null, { l: l.naam }].filter(Boolean)),
           U.kop(l.naam, [l.klas, nr ? "studentnummer " + nr : "", `${l.aantalKlassen} vakken`].filter(Boolean).join(" · "), [U.gemChip(c?.totaal ?? null), ...U.chips(l), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Rapport", onclick: () => TT.guard(() => this.rapportDialoog(TT, l.klas), "Rapport") })]),
           sig ? TT.el("div", { class: "tt-signaal" }, [TT.el("b", { text: "Signaal: " }), `${sig.redenen.join(", ")}${sig.klassenMetProbleem.length ? " · in " + sig.klassenMetProbleem.map((x) => this.vakVan(TT, x)).join(", ") : ""}`]) : null,
-          U.sectie("Per vak", TT.el("div", { class: "tt-kaarten" }, kaarten), "Klik op een vak voor de opdrachten en categorieën."),
+          U.sectie("Per vak", vakTabel, "Klik op een kolomkop om te sorteren, op een rij voor de opdrachten en categorieën."),
           rub.length ? U.sectie("Rubric-rijen over vakken heen", TT.el("div", { class: "tt-lijst" }, rub.map(({ rij, n }) => U.rij(rij.tekst, n.beoordelingen.map((b) => `${this.vakVan(TT, b.klas)}: ${b.niveau}`).join(" · "), [n.gemiddeld != null ? U.chip(`gem. ${U.P(n.gemiddeld)}`, n.gemiddeld < 0.5 ? "bad" : "ok") : null].filter(Boolean), () => this.ga(TT, { type: "rubrics" }))))) : null
         ];
       }
     } else if (pg.type === "nakijken") {
       out = [U.kruimels([start, { l: "Nakijken" }]), U.kop("Na te kijken", `${r.totaal.nakijken} inleveringen in ${r.nakijken.length} opdrachten, langst wachtende bovenaan`),
-        r.nakijken.length ? TT.el("div", { class: "tt-lijst" }, r.nakijken.map((o) => U.rij(o.naam, `${this.vakVan(TT, o.klas)} · ${K.teamKlas[o.klasId] || ""}`, [U.chip(`${o.nakijken} wachten`, "warn"), U.chip(`${o.wachtDagen} dagen`, o.wachtDagen >= 14 ? "bad" : o.wachtDagen >= 7 ? "warn" : "")], () => { this._open.add("op:" + o.id); this.ga(TT, { type: "team", id: o.klasId }); }))) : U.leeg("Niets te nakijken.")];
+        ...(() => { const S_ = this.sorteer(TT, "nakijken", r.nakijken, [{ k: "wacht", l: "Wachttijd", f: (o) => o.wachtDagen, desc: true }, { k: "aantal", l: "Aantal", f: (o) => o.nakijken, desc: true }, { k: "naam", l: "Naam", f: (o) => o.naam }, { k: "vak", l: "Vak", f: (o) => this.vakVan(TT, o.klas) }], "wacht"); return [S_.balk, S_.items.length ? TT.el("div", { class: "tt-lijst" }, S_.items.map((o) => U.rij(o.naam, `${this.vakVan(TT, o.klas)} · ${K.teamKlas[o.klasId] || ""}`, [U.chip(`${o.nakijken} wachten`, "warn"), U.chip(`${o.wachtDagen} dagen`, o.wachtDagen >= 14 ? "bad" : o.wachtDagen >= 7 ? "warn" : "")], () => { this._open.add("op:" + o.id); this.ga(TT, { type: "team", id: o.klasId }); }))) : U.leeg("Niets te nakijken.")]; })()];
     } else if (pg.type === "deadlines") {
       const dls = r.deadlines.filter((o) => o.dagen <= 30);
       out = [U.kruimels([start, { l: "Deadlines" }]), U.kop("Deadlines", "Komende 30 dagen, over alle klassen, op datum"),
@@ -762,7 +796,7 @@ TT.register({
     } else if (pg.type === "signalen") {
       const o = TT.settings.opdrachten;
       out = [U.kruimels([start, { l: "Signalen" }]), U.kop("Signalen", `Minstens ${o.drempelOntbreekt}× ontbrekend werk of ${o.drempelTeLaat}× te laat, over alle vakken opgeteld (drempels in de instellingen)`),
-        r.signalen.length ? TT.el("div", { class: "tt-lijst" }, r.signalen.map((l) => U.rij(l.naam, `${l.klas || ""} · ${l.redenen.join(", ")} · in ${l.klassenMetProbleem.map((x) => this.vakVan(TT, x)).join(", ")}`, U.chips(l).slice(0, 2), () => this.ga(TT, { type: "leerling", id: l.id })))) : U.leeg("Geen signalen.")];
+        ...(() => { const S_ = this.sorteer(TT, "signalen", r.signalen, [{ k: "zwaarte", l: "Zwaarte", f: (l) => l.ontbreekt + l.teLaat, desc: true }, { k: "naam", l: "Naam", f: (l) => l.naam }, { k: "klas", l: "Klas", f: (l) => l.klas }, { k: "activiteit", l: "Activiteit", f: (l) => l.laatste || 0, desc: true }], "zwaarte"); return [S_.balk, S_.items.length ? TT.el("div", { class: "tt-lijst" }, S_.items.map((l) => U.rij(l.naam, `${l.klas || ""} · ${l.redenen.join(", ")} · in ${l.klassenMetProbleem.map((x) => this.vakVan(TT, x)).join(", ")}`, U.chips(l).slice(0, 2), () => this.ga(TT, { type: "leerling", id: l.id })))) : U.leeg("Geen signalen.")]; })()];
     } else if (pg.type === "rubrics") {
       const rijen = this.rubrics(TT).rijen.filter((x) => x.gedeeld);
       out = [U.kruimels([start, { l: "Rubrics" }]), U.kop("Gedeelde rubric-rijen", `${rijen.length} rijen komen in meerdere opdrachten of vakken voor (herkend op tekst)`),

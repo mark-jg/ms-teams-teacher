@@ -185,3 +185,8 @@ html.tt-dark .tt-knob { background: #39393D; }
 .tt-zoek-rij { display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; padding: 7px 10px; border: 0; border-radius: 8px; background: none; color: var(--tt-fg); font: 13px var(--tt-font); cursor: pointer; }
 .tt-zoek-rij:hover { background: color-mix(in srgb, var(--tt-accent) 10%, transparent); } .tt-zoek-rij small { color: var(--tt-muted); }
 a.tt-btn { text-decoration: none; }
+.tt-sorteer { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 0 0 8px; font-size: 12px; }
+.tt-sorteer > .tt-muted { margin-right: 4px; }
+.tt-sorteer-knop { font: 500 11px var(--tt-font); padding: 4px 9px; border: 0; border-radius: 999px; background: var(--tt-panel-bg); color: var(--tt-muted); cursor: pointer; }
+.tt-sorteer-knop.is-on { background: var(--tt-accent); color: #fff; }
+.tt-sorteer-knop:focus-visible { outline: 2px solid var(--tt-gold); outline-offset: 2px; }

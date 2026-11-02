@@ -1,4 +1,4 @@
-# Docent Tools voor Teams (v0.6.0)
+# Docent Tools voor Teams (v0.6.1)
 
 Chrome-extensie voor Microsoft Teams (web) voor docenten: team-overstijgende analyses van opdrachten. Alles draait lokaal in je browser; er wordt niets naar een eigen server gestuurd. Zusje van [Docent Tools voor Magister](https://github.com/mark-jg/magister-docent), met dezelfde opzet.
 
@@ -104,6 +104,7 @@ Het zijpaneel toont onder **Koppeling** wat er aan de hand is:
 
 ## Wijzigingen
 
+- 0.6.1: elke lijst heeft een sorteerbalk (naam, activiteit, gemiddelde, ontbreekt, te laat; bij opdrachten ook deadline, bij nakijken wachttijd), de keuze wordt per lijst onthouden; de leerlingpagina toont de vakken als sorteerbare tabel in plaats van tegels, met per rij de opdrachten en categorieën.
 - 0.6.0: overzicht herbouwd als pagina's waarin je doorklikt (start met je werk en klassen › klas › vak of leerling), met zoeken; veel minder getallen in beeld, de tabbladen zijn weg (alles blijft in de Excel-export). Rapportthema's: Zwart/magenta (Mediacollege, met logo) en vier algemene; logo zit in de extensie.
 - 0.5.1: standaardsjabloon voor rapporten (vier periodes in leerjaarnotatie, MR/MIP, vakken automatisch gegroepeerd, toelichting) en een wizard in vijf stappen die bij de eerste klik op Rapporten opent, vooraf ingevuld uit je teams; periodes als MM-DD volgen elk schooljaar.
 - 0.5.0: rapporten per leerling (cijfers per vak per periode, studentnummer uit het e-mailadres, klas, opleiding, cohort, leerjaar, opmerkingen per periode), afdrukbaar in de huisstijl van Mediacollege Amsterdam en naar Excel; instellingen voor periodes, opleidingen, vakgroepen, cesuur, afronding, titel en toelichting; e-mailadres en naamdelen van leerlingen worden meegehaald (eerste keer bijwerken haalt leden opnieuw op).
