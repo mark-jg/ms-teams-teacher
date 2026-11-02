@@ -225,3 +225,6 @@ a.tt-btn { text-decoration: none; }
 .tt-raster tr.is-klik { cursor: pointer; } .tt-raster tr.is-klik:hover td.tt-raster-label { color: var(--tt-accent); }
 .tt-raster-vol .tt-raster-tekst { text-align: left; white-space: normal; font-size: 11px; vertical-align: top; min-width: 120px; height: auto; }
 .tt-raster-vol .tt-raster-tekst .tt-stip { margin-right: 6px; float: left; margin-top: 2px; }
+.tt-rubric.is-ingebed { background: none; box-shadow: none; padding: 0; }
+.tt-rij-rubric { grid-template-columns: minmax(160px, 1fr) auto auto; }
+.tt-rij-rubric .tt-rij-rechts { max-width: 60%; }
