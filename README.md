@@ -1,4 +1,4 @@
-# Docent Tools voor Teams (v0.6.1)
+# Docent Tools voor Teams (v0.6.2)
 
 Chrome-extensie voor Microsoft Teams (web) voor docenten: team-overstijgende analyses van opdrachten. Alles draait lokaal in je browser; er wordt niets naar een eigen server gestuurd. Zusje van [Docent Tools voor Magister](https://github.com/mark-jg/magister-docent), met dezelfde opzet.
 
@@ -23,6 +23,7 @@ Werkt ook in Edge (`edge://extensions`). Na elke update of herlaad van de extens
 | **Leerling**: per vak het (gewogen) gemiddelde, ontbrekend en te laat werk, de opdrachten, gedeelde rubric-rijen, signaal | klik op een leerling of zoek de naam |
 | **Rapporten**: per leerling een A4-rapport met cijfers per vak per periode, studentnummer, klas, opleiding, cohort en leerjaar; thema Zwart/magenta (huisstijl Mediacollege Amsterdam) of een algemeen thema; opmerkingen typ je in het rapport | knop Rapporten, ook per klas en per leerling |
 | **Rubrics**: rubric-rijen die in meerdere opdrachten of vakken voorkomen, met per leerling het gekozen niveau | via het startscherm of een leerling |
+| **Verbergen**: haal een leerling, klas, vak of opdracht uit het overzicht met het kruisje op de rij of kaart (of de knop Verbergen op de pagina); verborgen items tellen nergens meer mee, ook niet in rapporten; terugzetten via de knop Verborgen | kruisje bij aanwijzen; knop Verborgen bovenin |
 | Zoeken naar leerling, vak of klas; periode (schooljaar, 90 dagen, 30 dagen, alles); welke teams meetellen (automatisch of zelf gekozen) | bovenin het overzicht |
 | Export naar Excel: alle overzichten in één werkmap (teams, leerlingen, opdrachten, signalen, klassen, cijfers, rubrics, inleveringen) | knop Excel |
 | Zijpaneel met status van de koppeling, modules aan/uit en thema | Alt+K of het handvat |
@@ -104,6 +105,7 @@ Het zijpaneel toont onder **Koppeling** wat er aan de hand is:
 
 ## Wijzigingen
 
+- 0.6.2: verbergen van leerlingen, klassen, vakken en opdrachten via een kruisje op rijen en kaarten; verborgen items tellen nergens mee (ook niet in startkaarten en rapporten) en zijn terug te zetten via de knop Verborgen; de lijst blijft bewaard.
 - 0.6.1: elke lijst heeft een sorteerbalk (naam, activiteit, gemiddelde, ontbreekt, te laat; bij opdrachten ook deadline, bij nakijken wachttijd), de keuze wordt per lijst onthouden; de leerlingpagina toont de vakken als sorteerbare tabel in plaats van tegels, met per rij de opdrachten en categorieën.
 - 0.6.0: overzicht herbouwd als pagina's waarin je doorklikt (start met je werk en klassen › klas › vak of leerling), met zoeken; veel minder getallen in beeld, de tabbladen zijn weg (alles blijft in de Excel-export). Rapportthema's: Zwart/magenta (Mediacollege, met logo) en vier algemene; logo zit in de extensie.
 - 0.5.1: standaardsjabloon voor rapporten (vier periodes in leerjaarnotatie, MR/MIP, vakken automatisch gegroepeerd, toelichting) en een wizard in vijf stappen die bij de eerste klik op Rapporten opent, vooraf ingevuld uit je teams; periodes als MM-DD volgen elk schooljaar.

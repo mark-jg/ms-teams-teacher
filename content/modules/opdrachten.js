@@ -14,7 +14,7 @@ TT.register({
     this._filter.periode = TT.settings.opdrachten.periode || "schooljaar";
     chrome.storage.local.get(["ttData", "ttFilter"]).then(({ ttData, ttFilter }) => {
       if (ttFilter) Object.assign(this._filter, { periode: ttFilter.periode || this._filter.periode, klassen: ttFilter.klassen ? new Set(ttFilter.klassen) : null, auto: ttFilter.auto !== false });
-      chrome.storage.local.get("ttSorteer").then(({ ttSorteer }) => { if (ttSorteer) this._sorteer = ttSorteer; }).catch(() => {});
+      chrome.storage.local.get(["ttSorteer", "ttVerborgen"]).then(({ ttSorteer, ttVerborgen }) => { if (ttSorteer) this._sorteer = ttSorteer; if (ttVerborgen) this._verborgen = { ...this._verborgen, ...ttVerborgen }; this._verborgenVersie++; if (this._data) this.renderWidget(TT); }).catch(() => {});
       if (ttData?.classes) { this._data = this.migreer(ttData); this.renderWidget(TT); }
     });
   },
@@ -65,11 +65,78 @@ TT.register({
     if (this._autoCache?.at !== this._data?.at) this._autoCache = { at: this._data?.at, set: new Set((this._data?.classes || []).filter((c) => !this.klasRedenen(c).length).map((c) => c.id)) };
     return this._autoCache.set;
   },
-  /* Geselecteerde klassen als Set, of null voor alle. */
-  selectie() {
+  /* Basiskeuze van teams als Set, of null voor alle: automatisch of handmatig. */
+  selectieBasis() {
     if (!this._data) return null;
     if (this._filter.auto) { const s = this.autoKlassen(); return s.size ? s : null; }
     return this._filter.klassen;
+  },
+  /* Werkelijke selectie: de basiskeuze zonder verborgen teams en zonder de teams van verborgen klassen. */
+  selectie() {
+    const basis = this.selectieBasis();
+    if (!this._data) return null;
+    const vt = this._verborgen.teams, vk = this._verborgen.klassen;
+    if (!Object.keys(vt).length && !Object.keys(vk).length) return basis;
+    const sleutel = JSON.stringify([this._data.at, basis ? [...basis].sort() : null, this._verborgenVersie, this.patroonCache]);
+    if (this._selectieCache?.sleutel === sleutel) return this._selectieCache.set;
+    let teamKlas = {};
+    if (Object.keys(vk).length) teamKlas = TT_ANALYSE.klassen(this._data, { teams: basis, patroon: this.patroonCache || "" }).teamKlas;
+    const set = new Set((this._data.classes || []).filter((c) => (!basis || basis.has(c.id)) && !vt[c.id] && !vk[teamKlas[c.id]]).map((c) => c.id));
+    this._selectieCache = { sleutel, set };
+    return set;
+  },
+
+  /* ---------- Verbergen ----------
+   * Leerlingen, klassen, vakken (teams) en opdrachten die je uit het overzicht haalt. Ze tellen nergens
+   * meer mee (ook niet in de startkaarten en rapporten) tot je ze terugzet. Bewaard in chrome.storage.local. */
+  _verborgen: { leerlingen: {}, klassen: {}, teams: {}, opdrachten: {} }, _verborgenVersie: 0, patroonCache: "",
+  verborgenAantal() { return Object.values(this._verborgen).reduce((a, m) => a + Object.keys(m).length, 0); },
+  bewaarVerborgen() { try { chrome.storage.local.set({ ttVerborgen: this._verborgen }).catch(() => {}); } catch {} },
+  verberg(TT, type, id, label) {
+    this._verborgen[type][id] = label || String(id);
+    this._verborgenVersie++; this.bewaarVerborgen();
+    TT.toast(`${label || "Item"} verborgen. Terugzetten via de knop Verborgen.`, "ok");
+    this.render(TT); this.renderWidget(TT);
+  },
+  toon(TT, type, id) {
+    delete this._verborgen[type][id];
+    this._verborgenVersie++; this.bewaarVerborgen();
+    this.render(TT); this.renderWidget(TT);
+  },
+  /* Gegevens zonder verborgen leerlingen en opdrachten; teams en klassen gaan via de selectie. */
+  zichtbareData() {
+    const d = this._data; if (!d) return d;
+    const vl = this._verborgen.leerlingen, vo = this._verborgen.opdrachten;
+    if (!Object.keys(vl).length && !Object.keys(vo).length) return d;
+    const sleutel = JSON.stringify([d.at, this._verborgenVersie]);
+    if (this._zichtbaarCache?.sleutel === sleutel) return this._zichtbaarCache.d;
+    const members = {}; for (const [k, ms] of Object.entries(d.members || {})) members[k] = ms.filter((m) => !vl[m.id]);
+    const assignments = (d.assignments || []).filter((a) => !vo[a.id]);
+    const submissions = {}; for (const a of assignments) submissions[a.id] = (d.submissions?.[a.id] || []).filter((x) => !vl[x.recipient?.userId]);
+    const uit = { ...d, members, assignments, submissions };
+    this._zichtbaarCache = { sleutel, d: uit };
+    return uit;
+  },
+  /* Beheer: alles wat verborgen is, per soort, met terugzetten. */
+  verborgenBeheer(TT, anchor) {
+    document.getElementById("tt-kiezer")?.remove();
+    const box = TT.el("div", { id: "tt-kiezer", role: "dialog", "aria-label": "Verborgen items" });
+    const r = anchor.getBoundingClientRect();
+    box.style.top = `${r.bottom + 6}px`; box.style.left = `${Math.max(8, Math.min(r.left, innerWidth - 380))}px`;
+    const sluit = () => { box.remove(); document.removeEventListener("mousedown", buiten, true); document.removeEventListener("keydown", esc, true); };
+    const buiten = (e) => { if (!box.contains(e.target) && e.target !== anchor) sluit(); };
+    const esc = (e) => { if (e.key === "Escape") { e.stopPropagation(); sluit(); anchor.focus(); } };
+    document.addEventListener("mousedown", buiten, true); document.addEventListener("keydown", esc, true);
+    const soorten = [["klassen", "Klassen"], ["teams", "Vakken (teams)"], ["leerlingen", "Leerlingen"], ["opdrachten", "Opdrachten"]];
+    const lijst = TT.el("div", { class: "tt-kiezer-lijst" });
+    const teken = () => {
+      const delen = soorten.filter(([t]) => Object.keys(this._verborgen[t]).length).flatMap(([t, l]) => [TT.el("div", { class: "tt-muted", style: "padding:6px 2px 2px;font-size:10px;text-transform:uppercase;letter-spacing:.04em", text: l }),
+        ...Object.entries(this._verborgen[t]).sort((a, b) => String(a[1]).localeCompare(String(b[1]), "nl")).map(([id, label]) => TT.el("div", { class: "tt-kiezer-rij", style: "justify-content:space-between" }, [TT.el("span", { text: String(label) }), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Terugzetten", onclick: () => { this.toon(TT, t, id); teken(); } })]))]);
+      lijst.replaceChildren(...(delen.length ? delen : [TT.el("div", { class: "tt-muted", style: "padding:8px", text: "Niets verborgen. Wijs een rij of kaart aan en klik op het kruisje om die te verbergen." })]));
+    };
+    box.append(TT.el("div", { class: "tt-row", style: "justify-content:space-between" }, [TT.el("b", { text: "Verborgen" }), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Alles terugzetten", onclick: () => { for (const [t] of soorten) this._verborgen[t] = {}; this._verborgenVersie++; this.bewaarVerborgen(); this.render(TT); this.renderWidget(TT); teken(); } })]), lijst);
+    teken();
+    document.body.append(box);
   },
   destroy() { this._overlay?.remove(); this._overlay = null; },
 
@@ -245,12 +312,12 @@ TT.register({
   },
 
   /* Klassen afgeleid uit lidmaatschap en teamnaam (zie analyse.js), binnen de geselecteerde teams. */
-  patroon(TT) { return (TT.settings.opdrachten.klascodePatroon || "").trim() || globalThis.TT_KLASCODE || ""; },
+  patroon(TT) { const p = (TT.settings.opdrachten.klascodePatroon || "").trim() || globalThis.TT_KLASCODE || ""; this.patroonCache = p; return p; },
   klassen(TT) {
+    const patroon = this.patroon(TT); // vóór selectie(): die gebruikt het patroon voor verborgen klassen
     const sel = this.selectie();
-    const patroon = this.patroon(TT);
-    const sleutel = JSON.stringify([this._data?.at, sel ? [...sel].sort() : null, patroon]);
-    if (this._klassen?.sleutel !== sleutel) this._klassen = { sleutel, ...TT_ANALYSE.klassen(this._data, { teams: sel, patroon }) };
+    const sleutel = JSON.stringify([this._data?.at, sel ? [...sel].sort() : null, patroon, this._verborgenVersie]);
+    if (this._klassen?.sleutel !== sleutel) this._klassen = { sleutel, ...TT_ANALYSE.klassen(this.zichtbareData(), { teams: sel, patroon }) };
     return this._klassen;
   },
   /* Analyse wordt één keer per combinatie van gegevens en filters berekend; tabwissels zijn dan gratis. */
@@ -259,17 +326,17 @@ TT.register({
     const K = this.klassen(TT);
     const sel = this.selectie();
     const sleutel = JSON.stringify([this._data?.at, this._filter.periode, sel ? [...sel].sort() : null, K.sleutel, o.drempelOntbreekt, o.drempelTeLaat]);
-    if (this._analyseCache?.sleutel !== sleutel) this._analyseCache = { sleutel, r: TT_ANALYSE.bouw(this._data, { periode: this._filter.periode, klassen: sel, klasVan: K.klasVan, drempelOntbreekt: o.drempelOntbreekt, drempelTeLaat: o.drempelTeLaat }) };
+    if (this._analyseCache?.sleutel !== sleutel) this._analyseCache = { sleutel, r: TT_ANALYSE.bouw(this.zichtbareData(), { periode: this._filter.periode, klassen: sel, klasVan: K.klasVan, drempelOntbreekt: o.drempelOntbreekt, drempelTeLaat: o.drempelTeLaat }) };
     return this._analyseCache.r;
   },
   cijfers(TT) {
     const r = this.analyse(TT); // zorgt voor dezelfde sleutel
-    if (this._cijfersCache?.r !== r) this._cijfersCache = { r, c: TT_ANALYSE.cijfers(this._data, { periode: this._filter.periode, klassen: this.selectie(), klasVan: this.klassen(TT).klasVan }) };
+    if (this._cijfersCache?.r !== r) this._cijfersCache = { r, c: TT_ANALYSE.cijfers(this.zichtbareData(), { periode: this._filter.periode, klassen: this.selectie(), klasVan: this.klassen(TT).klasVan }) };
     return this._cijfersCache.c;
   },
   rubrics(TT) {
     const r = this.analyse(TT);
-    if (this._rubricsCache?.r !== r) this._rubricsCache = { r, u: TT_ANALYSE.rubrics(this._data, { periode: this._filter.periode, klassen: this.selectie() }) };
+    if (this._rubricsCache?.r !== r) this._rubricsCache = { r, u: TT_ANALYSE.rubrics(this.zichtbareData(), { periode: this._filter.periode, klassen: this.selectie() }) };
     return this._rubricsCache.u;
   },
   /* ---------- Rapporten ---------- */
@@ -419,7 +486,7 @@ TT.register({
       const periodes = pr.filter((x) => x.cb.checked).map((x) => x.p);
       if (!alleenKlassen.size) { status.textContent = "Kies minstens één klas."; return null; }
       if (!periodes.length) { status.textContent = "Kies minstens één periode (instellen bij Instellingen › Rapporten)."; return null; }
-      const r = TT_ANALYSE.rapport(this._data, { periodes, klasVan: K.klasVan, teamKlas: K.teamKlas, klassen: this.selectie(), patroon: this.patroon(TT), opleidingen: inst.opleidingen, vakgroepen: inst.vakgroepen, cesuur: inst.cesuur, afronding: afr.value, alleenKlassen, schooljaarStart: this.schooljaarStart() });
+      const r = TT_ANALYSE.rapport(this.zichtbareData(), { periodes, klasVan: K.klasVan, teamKlas: K.teamKlas, klassen: this.selectie(), patroon: this.patroon(TT), opleidingen: inst.opleidingen, vakgroepen: inst.vakgroepen, cesuur: inst.cesuur, afronding: afr.value, alleenKlassen, schooljaarStart: this.schooljaarStart() });
       if (!r.leerlingen.length) { status.textContent = "Geen leerlingen in deze klassen."; return null; }
       const sj = this.schooljaarStart().getFullYear();
       return { ...r, gemaakt: Date.now(), titel: inst.titel, toelichting: inst.toelichting, cesuur: inst.cesuur, afronding: afr.value, thema: thema.value, school: inst.school, schooljaar: `${sj}-${sj + 1}` };
@@ -557,7 +624,9 @@ TT.register({
       TT.el("button", { class: "tt-btn tt-btn-sm", text: "Bijwerken", title: `Opgehaald ${TT.fmtDateTime(this._data.at)}. Alt+klik haalt alles opnieuw op.`, onclick: (e) => this.bijwerken(TT, { volledig: e.altKey }) }),
       TT.el("button", { class: "tt-btn tt-btn-sm", text: "Sluiten", onclick: () => this.close() })
     ]);
-    const tools = TT.el("div", { class: "tt-sheet-tools" }, [zoekBox, periode, kiezer, TT.el("span", { id: "tt-bijwerk-status", class: "tt-muted", style: "margin-left:auto", "aria-live": "polite" }), TT.el("span", { class: "tt-muted", text: `opgehaald ${TT.fmtDateTime(this._data.at)}` })]);
+    const nV = this.verborgenAantal();
+    const verborgen = TT.el("button", { class: "tt-btn tt-btn-sm" + (nV ? " tt-btn-accent" : ""), text: nV ? `Verborgen (${nV})` : "Verborgen", title: "Verborgen leerlingen, klassen, vakken en opdrachten terugzetten", onclick: (e) => TT.guard(() => this.verborgenBeheer(TT, e.currentTarget), "Verborgen") });
+    const tools = TT.el("div", { class: "tt-sheet-tools" }, [zoekBox, periode, kiezer, verborgen, TT.el("span", { id: "tt-bijwerk-status", class: "tt-muted", style: "margin-left:auto", "aria-live": "polite" }), TT.el("span", { class: "tt-muted", text: `opgehaald ${TT.fmtDateTime(this._data.at)}` })]);
     this._body = TT.el("div", { class: "tt-sheet-body" });
     this._overlay.replaceChildren(TT.el("div", { class: "tt-sheet" }, [head, tools, this._body]));
     this.renderBody(TT);
@@ -592,7 +661,7 @@ TT.register({
     const lijst = TT.el("div", { class: "tt-kiezer-lijst" });
     const alle = () => new Set(this._data.classes.map((c) => c.id));
     const bouw = () => {
-      const sel = this.selectie();
+      const sel = this.selectieBasis();
       const kls = [...this._data.classes].sort((a, b) => (this.klasRedenen(a).length - this.klasRedenen(b).length) || a.displayName.localeCompare(b.displayName, "nl"));
       lijst.replaceChildren(...kls.filter((c) => !q || c.displayName.toLowerCase().includes(q)).map((c) => {
         const on = !sel || sel.has(c.id);
@@ -610,7 +679,7 @@ TT.register({
     const zoek = TT.el("input", { class: "tt-input", type: "search", placeholder: "Zoek klas…", "aria-label": "Zoek klas", oninput: (e) => { q = e.target.value.trim().toLowerCase(); bouw(); } });
     const knop = (txt, title, fn) => TT.el("button", { class: "tt-btn tt-btn-sm", text: txt, title, onclick: () => TT.guard(() => { fn(); this.render(TT); this.renderWidget(TT); bouw(); kop(); this.saveFilter(); }, "Klassen") });
     const kopEl = TT.el("div", { class: "tt-muted", style: "padding:4px 2px 0" });
-    const kop = () => { const sel = this.selectie(); kopEl.textContent = this._filter.auto ? `Automatisch: ${sel ? sel.size : this._data.classes.length} eigen, actieve klasteams van dit schooljaar.` : `Handmatige keuze: ${sel ? sel.size : this._data.classes.length} van ${this._data.classes.length}.`; };
+    const kop = () => { const sel = this.selectieBasis(); kopEl.textContent = this._filter.auto ? `Automatisch: ${sel ? sel.size : this._data.classes.length} eigen, actieve klasteams van dit schooljaar.` : `Handmatige keuze: ${sel ? sel.size : this._data.classes.length} van ${this._data.classes.length}.`; };
     box.append(zoek, TT.el("div", { class: "tt-row", style: "margin:8px 0 2px" }, [
       knop("Automatisch", "Eigen, actieve klasteams van dit schooljaar", () => { this._filter.auto = true; this._filter.klassen = null; }),
       knop("Alles", "", () => { this._filter.auto = false; this._filter.klassen = null; }),
@@ -645,11 +714,14 @@ TT.register({
     const balk = (f, label) => TT.el("div", { class: "tt-balk" }, [TT.el("span", { class: "tt-bar" }, TT.el("i", { style: `width:${Math.round((f || 0) * 100)}%` })), TT.el("span", { class: "tt-muted", text: `${P(f) || "–"} ${label || ""}` })]);
     const kop = (titel, sub, extra) => TT.el("div", { class: "tt-pagina-kop" }, [TT.el("div", {}, [TT.el("h3", { text: titel }), sub ? TT.el("div", { class: "tt-muted", text: sub }) : null]), extra ? TT.el("div", { class: "tt-row" }, extra) : null]);
     const sectie = (titel, inhoud, hint) => TT.el("section", { class: "tt-sectie" }, [TT.el("h4", { text: titel }), hint ? TT.el("p", { class: "tt-muted", text: hint }) : null, inhoud]);
-    const rij = (hoofd, sub, rechts, onclick) => TT.el("button", { class: "tt-rij", onclick }, [TT.el("span", { class: "tt-rij-tekst" }, [TT.el("b", { text: hoofd }), sub ? TT.el("small", { text: sub }) : null]), TT.el("span", { class: "tt-rij-rechts" }, rechts), TT.el("span", { class: "tt-rij-pijl", text: "›" })]);
+    const toets = (fn) => (e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); fn(); } };
+    const kruis = (v) => v ? TT.el("button", { class: "tt-verberg", title: `${v.label} verbergen`, "aria-label": `${v.label} verbergen`, text: "×", onclick: (e) => { e.stopPropagation(); TT.guard(() => this.verberg(TT, v.type, v.id, v.label), "Verbergen"); } }) : null;
+    const rij = (hoofd, sub, rechts, onclick, verbergen) => TT.el("div", { class: "tt-rij", role: "button", tabindex: "0", onclick, onkeydown: toets(onclick) }, [TT.el("span", { class: "tt-rij-tekst" }, [TT.el("b", { text: hoofd }), sub ? TT.el("small", { text: sub }) : null]), TT.el("span", { class: "tt-rij-rechts" }, rechts), kruis(verbergen), TT.el("span", { class: "tt-rij-pijl", text: "›" })]);
+    const kaart = (kids, onclick, verbergen, cls = "") => TT.el("div", { class: "tt-kaart " + cls, role: "button", tabindex: "0", onclick, onkeydown: toets(onclick) }, [kruis(verbergen), ...kids]);
     const leeg = (t) => TT.el("div", { class: "tt-empty", text: t });
     const kruimels = (delen) => TT.el("nav", { class: "tt-kruimels", "aria-label": "Pad" }, delen.flatMap((x, i) => [i ? TT.el("span", { class: "tt-muted", text: "›" }) : null, x.p ? TT.el("button", { class: "tt-kruimel", text: x.l, onclick: () => this.ga(TT, x.p) }) : TT.el("span", { class: "tt-kruimel is-hier", text: x.l })]).filter(Boolean));
     const gemChip = (v) => v == null ? chip("geen cijfers", "") : chip(`gem. ${P(v)}`, v < 0.55 ? "bad" : v < 0.7 ? "warn" : "ok");
-    return { P, D, chip, chips, balk, kop, sectie, rij, leeg, kruimels, gemChip };
+    return { P, D, chip, chips, balk, kop, sectie, rij, kaart, leeg, kruimels, gemChip };
   },
   /* Sorteerbalk boven een lijst. opties: [{ k, l, f(x) → waarde, desc }]; de keuze wordt per lijst onthouden. */
   _sorteer: {},
@@ -682,17 +754,17 @@ TT.register({
     let out = [];
 
     if (pg.type === "home") {
-      const kaarten = ko.filter((k) => k.leerlingen > 0).map((k) => TT.el("button", { class: "tt-kaart", onclick: () => this.ga(TT, { type: "klas", id: k.naam }) }, [
+      const kaarten = ko.filter((k) => k.leerlingen > 0).map((k) => U.kaart([
         TT.el("b", { text: k.naam }), TT.el("small", { text: `${k.leerlingen} leerlingen · ${k.aantalTeams} ${k.aantalTeams === 1 ? "vak" : "vakken"}` }),
         U.balk(k.pctIngeleverd, "ingeleverd"),
         TT.el("div", { class: "tt-row" }, [...U.chips(k), k.metSignaal > 0 ? U.chip(`${k.metSignaal} met signaal`, "bad") : null, !k.ontbreekt && !k.nakijken && !k.metSignaal ? U.chip("alles in orde", "ok") : null].filter(Boolean))
-      ]));
+      ], () => this.ga(TT, { type: "klas", id: k.naam }), { type: "klassen", id: k.naam, label: k.naam }));
       const nak = r.totaal.nakijken, dl = r.deadlines.filter((o) => o.dagen <= 14).length;
       out = [
         U.sectie("Mijn werk", TT.el("div", { class: "tt-kaarten" }, [
-          TT.el("button", { class: "tt-kaart tt-kaart-actie", onclick: () => this.ga(TT, { type: "nakijken" }) }, [TT.el("b", { text: String(nak) }), TT.el("small", { text: nak === 1 ? "inlevering wacht op nakijken" : "inleveringen wachten op nakijken" }), r.nakijken.length ? TT.el("span", { class: "tt-muted", text: `in ${r.nakijken.length} opdrachten · langste wachttijd ${r.nakijken[0].wachtDagen} dagen` }) : null]),
-          TT.el("button", { class: "tt-kaart tt-kaart-actie", onclick: () => this.ga(TT, { type: "deadlines" }) }, [TT.el("b", { text: String(dl) }), TT.el("small", { text: dl === 1 ? "deadline in de komende 14 dagen" : "deadlines in de komende 14 dagen" }), r.deadlines[0] ? TT.el("span", { class: "tt-muted", text: `eerstvolgende: ${r.deadlines[0].naam} (${U.D(r.deadlines[0].due)})` }) : null]),
-          TT.el("button", { class: "tt-kaart tt-kaart-actie", onclick: () => this.ga(TT, { type: "signalen" }) }, [TT.el("b", { text: String(r.signalen.length) }), TT.el("small", { text: r.signalen.length === 1 ? "leerling met een signaal" : "leerlingen met een signaal" }), TT.el("span", { class: "tt-muted", text: "ontbrekend werk of te laat, over alle vakken opgeteld" })])
+          U.kaart([TT.el("b", { text: String(nak) }), TT.el("small", { text: nak === 1 ? "inlevering wacht op nakijken" : "inleveringen wachten op nakijken" }), r.nakijken.length ? TT.el("span", { class: "tt-muted", text: `in ${r.nakijken.length} opdrachten · langste wachttijd ${r.nakijken[0].wachtDagen} dagen` }) : null], () => this.ga(TT, { type: "nakijken" }), null, "tt-kaart-actie"),
+          U.kaart([TT.el("b", { text: String(dl) }), TT.el("small", { text: dl === 1 ? "deadline in de komende 14 dagen" : "deadlines in de komende 14 dagen" }), r.deadlines[0] ? TT.el("span", { class: "tt-muted", text: `eerstvolgende: ${r.deadlines[0].naam} (${U.D(r.deadlines[0].due)})` }) : null], () => this.ga(TT, { type: "deadlines" }), null, "tt-kaart-actie"),
+          U.kaart([TT.el("b", { text: String(r.signalen.length) }), TT.el("small", { text: r.signalen.length === 1 ? "leerling met een signaal" : "leerlingen met een signaal" }), TT.el("span", { class: "tt-muted", text: "ontbrekend werk of te laat, over alle vakken opgeteld" })], () => this.ga(TT, { type: "signalen" }), null, "tt-kaart-actie")
         ])),
         U.sectie("Klassen", kaarten.length ? TT.el("div", { class: "tt-kaarten" }, kaarten) : U.leeg("Geen klassen met leerlingen in de gekozen teams."), "Klik op een klas voor de leerlingen en vakken."),
         this.rubrics(TT).rijen.some((x) => x.gedeeld) ? U.sectie("Rubrics", U.rij("Gedeelde rubric-rijen", `${this.rubrics(TT).rijen.filter((x) => x.gedeeld).length} rijen komen in meerdere vakken of opdrachten voor`, [], () => this.ga(TT, { type: "rubrics" }))) : null
@@ -711,9 +783,9 @@ TT.register({
         out = [U.kruimels([start, { l: pg.id }]),
           U.kop(pg.id, `${k.leerlingen} leerlingen · ${teams.length} vakken · ${k.toegewezen} opdrachten toegewezen`, [U.gemChip(k.gemiddeld), ...U.chips(k), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Rapporten", onclick: () => TT.guard(() => this.rapportDialoog(TT, pg.id), "Rapporten") })]),
           TT.el("div", { class: "tt-twee" }, [
-            U.sectie("Leerlingen", TT.el("div", {}, [lS.balk, lln.length ? TT.el("div", { class: "tt-lijst" }, lln.map((l) => U.rij(l.naam, `${l.ingeleverd} van ${l.toegewezen} ingeleverd${l.laatste ? " · laatst actief " + U.D(l.laatste) : ""}`, [U.gemChip(gemVan(l.id)), ...U.chips(l).slice(0, 2)], () => this.ga(TT, { type: "leerling", id: l.id })))) : U.leeg("Geen leerlingen.")])),
+            U.sectie("Leerlingen", TT.el("div", {}, [lS.balk, lln.length ? TT.el("div", { class: "tt-lijst" }, lln.map((l) => U.rij(l.naam, `${l.ingeleverd} van ${l.toegewezen} ingeleverd${l.laatste ? " · laatst actief " + U.D(l.laatste) : ""}`, [U.gemChip(gemVan(l.id)), ...U.chips(l).slice(0, 2)], () => this.ga(TT, { type: "leerling", id: l.id }), { type: "leerlingen", id: l.id, label: l.naam }))) : U.leeg("Geen leerlingen.")])),
             TT.el("div", {}, [
-              U.sectie("Vakken", TT.el("div", {}, [tS.balk, TT.el("div", { class: "tt-lijst" }, teams.map((t) => U.rij(this.vakVan(TT, t.naam), `${t.opdrachten} opdrachten · ${U.P(t.pctIngeleverd) || "–"} ingeleverd`, U.chips(t).slice(0, 2), () => this.ga(TT, { type: "team", id: t.id }))))])),
+              U.sectie("Vakken", TT.el("div", {}, [tS.balk, TT.el("div", { class: "tt-lijst" }, teams.map((t) => U.rij(this.vakVan(TT, t.naam), `${t.opdrachten} opdrachten · ${U.P(t.pctIngeleverd) || "–"} ingeleverd`, U.chips(t).slice(0, 2), () => this.ga(TT, { type: "team", id: t.id }), { type: "teams", id: t.id, label: t.naam })))])),
               dls.length ? U.sectie("Komende deadlines", TT.el("div", { class: "tt-lijst" }, dls.map((o) => U.rij(o.naam, `${this.vakVan(TT, o.klas)} · ${U.D(o.due, { weekday: "short", day: "numeric", month: "short" })} · ${o.dagen <= 0 ? "vandaag" : o.dagen === 1 ? "morgen" : "over " + o.dagen + " dagen"}`, [U.chip(`${o.open} open`, o.open ? "warn" : "ok")], () => this.ga(TT, { type: "team", id: o.klasId }))))) : null
             ])
           ])];
@@ -733,7 +805,7 @@ TT.register({
         const open = new Set();
         const opRij = (o) => {
           const key = "op:" + o.id;
-          const knop = U.rij(o.naam, `${o.due ? "deadline " + U.D(o.due, { weekday: "short", day: "numeric", month: "short" }) : "zonder deadline"} · ${o.ingeleverd} van ${o.toegewezen} ingeleverd`, [...U.chips(o), o.gemiddeld != null ? U.gemChip(o.gemiddeld) : null].filter(Boolean), () => { this._open.has(key) ? this._open.delete(key) : this._open.add(key); this.renderBody(TT); });
+          const knop = U.rij(o.naam, `${o.due ? "deadline " + U.D(o.due, { weekday: "short", day: "numeric", month: "short" }) : "zonder deadline"} · ${o.ingeleverd} van ${o.toegewezen} ingeleverd`, [...U.chips(o), o.gemiddeld != null ? U.gemChip(o.gemiddeld) : null].filter(Boolean), () => { this._open.has(key) ? this._open.delete(key) : this._open.add(key); this.renderBody(TT); }, { type: "opdrachten", id: o.id, label: o.naam });
           if (!this._open.has(key)) return knop;
           const stat = r.leerlingen.map((l) => ({ l, o: l.opdrachten.find((x) => x.opdrachtId === o.id) })).filter((x) => x.o).sort((a, b) => a.l.naam.localeCompare(b.l.naam, "nl"));
           const kleur = { ontbreekt: "bad", ingeleverd: "warn", nagekeken: "ok", teruggegeven: "warn" };
@@ -743,10 +815,10 @@ TT.register({
           ])]);
         };
         out = [U.kruimels([start, klasNaam ? { l: klasNaam, p: { type: "klas", id: klasNaam } } : null, { l: vak }].filter(Boolean)),
-          U.kop(vak, `${t.naam} · ${t.leerlingen} leerlingen · ${t.opdrachten} opdrachten`, [U.gemChip(t.gemiddeld), ...U.chips(t)]),
+          U.kop(vak, `${t.naam} · ${t.leerlingen} leerlingen · ${t.opdrachten} opdrachten`, [U.gemChip(t.gemiddeld), ...U.chips(t), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Verbergen", title: "Dit vak uit het overzicht halen", onclick: () => TT.guard(() => { this.verberg(TT, "teams", t.id, t.naam); this.terug(TT); }, "Verbergen") })]),
           TT.el("div", { class: "tt-twee" }, [
             U.sectie("Opdrachten", TT.el("div", {}, [oS.balk, ops.length ? TT.el("div", { class: "tt-lijst" }, ops.map(opRij)) : U.leeg("Geen opdrachten in deze periode.")]), "Klik op een opdracht voor de stand per leerling."),
-            U.sectie("Leerlingen", TT.el("div", {}, [lS.balk, TT.el("div", { class: "tt-lijst" }, lln.map(({ l, k }) => U.rij(l.naam, `${k.ingeleverd} van ${k.toegewezen} ingeleverd${k.laatste ? " · laatst actief " + U.D(k.laatste) : ""}`, [U.gemChip(gemVan(l.id, pg.id)), ...U.chips(k).slice(0, 2)], () => this.ga(TT, { type: "leerling", id: l.id }))))]))
+            U.sectie("Leerlingen", TT.el("div", {}, [lS.balk, TT.el("div", { class: "tt-lijst" }, lln.map(({ l, k }) => U.rij(l.naam, `${k.ingeleverd} van ${k.toegewezen} ingeleverd${k.laatste ? " · laatst actief " + U.D(k.laatste) : ""}`, [U.gemChip(gemVan(l.id, pg.id)), ...U.chips(k).slice(0, 2)], () => this.ga(TT, { type: "leerling", id: l.id }), { type: "leerlingen", id: l.id, label: l.naam })))]))
           ])];
       }
     } else if (pg.type === "leerling") {
@@ -778,9 +850,9 @@ TT.register({
           { k: "nakijken", l: "Na te kijken", n: 1, f: (k) => ({ v: k.nakijken, text: k.nakijken ? String(k.nakijken) : "", cls: k.nakijken ? "tt-warnc" : "" }) },
           { k: "laatste", l: "Laatste activiteit", f: (k) => U.D(k.laatste) }
         ], vakRijen, vakDetail, { k: "vak", asc: true });
-        const rub = this.rubrics(TT).rijen.filter((x) => x.gedeeld).map((rij) => ({ rij, n: TT_ANALYSE.rijNiveaus(this._data, rij, { klasVan: K.klasVan }).find((x) => x.id === l.id) })).filter((x) => x.n);
+        const rub = this.rubrics(TT).rijen.filter((x) => x.gedeeld).map((rij) => ({ rij, n: TT_ANALYSE.rijNiveaus(this.zichtbareData(), rij, { klasVan: K.klasVan }).find((x) => x.id === l.id) })).filter((x) => x.n);
         out = [U.kruimels([start, l.klas ? { l: l.klas, p: { type: "klas", id: l.klas } } : null, { l: l.naam }].filter(Boolean)),
-          U.kop(l.naam, [l.klas, nr ? "studentnummer " + nr : "", `${l.aantalKlassen} vakken`].filter(Boolean).join(" · "), [U.gemChip(c?.totaal ?? null), ...U.chips(l), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Rapport", onclick: () => TT.guard(() => this.rapportDialoog(TT, l.klas), "Rapport") })]),
+          U.kop(l.naam, [l.klas, nr ? "studentnummer " + nr : "", `${l.aantalKlassen} vakken`].filter(Boolean).join(" · "), [U.gemChip(c?.totaal ?? null), ...U.chips(l), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Rapport", onclick: () => TT.guard(() => this.rapportDialoog(TT, l.klas), "Rapport") }), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Verbergen", title: "Deze leerling uit het overzicht halen", onclick: () => TT.guard(() => { this.verberg(TT, "leerlingen", l.id, l.naam); this.terug(TT); }, "Verbergen") })]),
           sig ? TT.el("div", { class: "tt-signaal" }, [TT.el("b", { text: "Signaal: " }), `${sig.redenen.join(", ")}${sig.klassenMetProbleem.length ? " · in " + sig.klassenMetProbleem.map((x) => this.vakVan(TT, x)).join(", ") : ""}`]) : null,
           U.sectie("Per vak", vakTabel, "Klik op een kolomkop om te sorteren, op een rij voor de opdrachten en categorieën."),
           rub.length ? U.sectie("Rubric-rijen over vakken heen", TT.el("div", { class: "tt-lijst" }, rub.map(({ rij, n }) => U.rij(rij.tekst, n.beoordelingen.map((b) => `${this.vakVan(TT, b.klas)}: ${b.niveau}`).join(" · "), [n.gemiddeld != null ? U.chip(`gem. ${U.P(n.gemiddeld)}`, n.gemiddeld < 0.5 ? "bad" : "ok") : null].filter(Boolean), () => this.ga(TT, { type: "rubrics" }))))) : null
@@ -788,7 +860,7 @@ TT.register({
       }
     } else if (pg.type === "nakijken") {
       out = [U.kruimels([start, { l: "Nakijken" }]), U.kop("Na te kijken", `${r.totaal.nakijken} inleveringen in ${r.nakijken.length} opdrachten, langst wachtende bovenaan`),
-        ...(() => { const S_ = this.sorteer(TT, "nakijken", r.nakijken, [{ k: "wacht", l: "Wachttijd", f: (o) => o.wachtDagen, desc: true }, { k: "aantal", l: "Aantal", f: (o) => o.nakijken, desc: true }, { k: "naam", l: "Naam", f: (o) => o.naam }, { k: "vak", l: "Vak", f: (o) => this.vakVan(TT, o.klas) }], "wacht"); return [S_.balk, S_.items.length ? TT.el("div", { class: "tt-lijst" }, S_.items.map((o) => U.rij(o.naam, `${this.vakVan(TT, o.klas)} · ${K.teamKlas[o.klasId] || ""}`, [U.chip(`${o.nakijken} wachten`, "warn"), U.chip(`${o.wachtDagen} dagen`, o.wachtDagen >= 14 ? "bad" : o.wachtDagen >= 7 ? "warn" : "")], () => { this._open.add("op:" + o.id); this.ga(TT, { type: "team", id: o.klasId }); }))) : U.leeg("Niets te nakijken.")]; })()];
+        ...(() => { const S_ = this.sorteer(TT, "nakijken", r.nakijken, [{ k: "wacht", l: "Wachttijd", f: (o) => o.wachtDagen, desc: true }, { k: "aantal", l: "Aantal", f: (o) => o.nakijken, desc: true }, { k: "naam", l: "Naam", f: (o) => o.naam }, { k: "vak", l: "Vak", f: (o) => this.vakVan(TT, o.klas) }], "wacht"); return [S_.balk, S_.items.length ? TT.el("div", { class: "tt-lijst" }, S_.items.map((o) => U.rij(o.naam, `${this.vakVan(TT, o.klas)} · ${K.teamKlas[o.klasId] || ""}`, [U.chip(`${o.nakijken} wachten`, "warn"), U.chip(`${o.wachtDagen} dagen`, o.wachtDagen >= 14 ? "bad" : o.wachtDagen >= 7 ? "warn" : "")], () => { this._open.add("op:" + o.id); this.ga(TT, { type: "team", id: o.klasId }); }, { type: "opdrachten", id: o.id, label: o.naam }))) : U.leeg("Niets te nakijken.")]; })()];
     } else if (pg.type === "deadlines") {
       const dls = r.deadlines.filter((o) => o.dagen <= 30);
       out = [U.kruimels([start, { l: "Deadlines" }]), U.kop("Deadlines", "Komende 30 dagen, over alle klassen, op datum"),
@@ -796,7 +868,7 @@ TT.register({
     } else if (pg.type === "signalen") {
       const o = TT.settings.opdrachten;
       out = [U.kruimels([start, { l: "Signalen" }]), U.kop("Signalen", `Minstens ${o.drempelOntbreekt}× ontbrekend werk of ${o.drempelTeLaat}× te laat, over alle vakken opgeteld (drempels in de instellingen)`),
-        ...(() => { const S_ = this.sorteer(TT, "signalen", r.signalen, [{ k: "zwaarte", l: "Zwaarte", f: (l) => l.ontbreekt + l.teLaat, desc: true }, { k: "naam", l: "Naam", f: (l) => l.naam }, { k: "klas", l: "Klas", f: (l) => l.klas }, { k: "activiteit", l: "Activiteit", f: (l) => l.laatste || 0, desc: true }], "zwaarte"); return [S_.balk, S_.items.length ? TT.el("div", { class: "tt-lijst" }, S_.items.map((l) => U.rij(l.naam, `${l.klas || ""} · ${l.redenen.join(", ")} · in ${l.klassenMetProbleem.map((x) => this.vakVan(TT, x)).join(", ")}`, U.chips(l).slice(0, 2), () => this.ga(TT, { type: "leerling", id: l.id })))) : U.leeg("Geen signalen.")]; })()];
+        ...(() => { const S_ = this.sorteer(TT, "signalen", r.signalen, [{ k: "zwaarte", l: "Zwaarte", f: (l) => l.ontbreekt + l.teLaat, desc: true }, { k: "naam", l: "Naam", f: (l) => l.naam }, { k: "klas", l: "Klas", f: (l) => l.klas }, { k: "activiteit", l: "Activiteit", f: (l) => l.laatste || 0, desc: true }], "zwaarte"); return [S_.balk, S_.items.length ? TT.el("div", { class: "tt-lijst" }, S_.items.map((l) => U.rij(l.naam, `${l.klas || ""} · ${l.redenen.join(", ")} · in ${l.klassenMetProbleem.map((x) => this.vakVan(TT, x)).join(", ")}`, U.chips(l).slice(0, 2), () => this.ga(TT, { type: "leerling", id: l.id }), { type: "leerlingen", id: l.id, label: l.naam }))) : U.leeg("Geen signalen.")]; })()];
     } else if (pg.type === "rubrics") {
       const rijen = this.rubrics(TT).rijen.filter((x) => x.gedeeld);
       out = [U.kruimels([start, { l: "Rubrics" }]), U.kop("Gedeelde rubric-rijen", `${rijen.length} rijen komen in meerdere opdrachten of vakken voor (herkend op tekst)`),
@@ -807,7 +879,7 @@ TT.register({
 
   rubricDetail(TT, rij) {
     const P = TT.pct, D = TT.fmtDate;
-    const N = TT_ANALYSE.rijNiveaus(this._data, rij, { klasVan: this.klassen(TT).klasVan });
+    const N = TT_ANALYSE.rijNiveaus(this.zichtbareData(), rij, { klasVan: this.klassen(TT).klasVan });
     return TT.el("div", {}, [
       N.length ? TT.el("table", { class: "tt-mini" }, [TT.el("tr", {}, ["Leerling", "Klas", "Gemiddeld", "Beoordelingen"].map((h) => TT.el("th", { text: h }))),
         ...N.map((x) => TT.el("tr", {}, [TT.el("td", {}, TT.el("a", { href: "#", text: x.naam, onclick: (e) => { e.preventDefault(); this.ga(TT, { type: "leerling", id: x.id }); } })), TT.el("td", { text: x.klas }), TT.el("td", { class: x.gemiddeld != null && x.gemiddeld < 0.5 ? "tt-bad" : "", text: P(x.gemiddeld) }), TT.el("td", { style: "white-space:normal", text: x.beoordelingen.map((b) => `${this.vakVan(TT, b.klas)} › ${b.opdracht} (${D(b.due)}): ${b.niveau}`).join(" · ") })]))])
@@ -862,7 +934,7 @@ TT.register({
     const U = this.rubrics(TT), p = (x) => (x == null ? "" : Math.round(x * 100) + "%");
     const R = [["Rubric-rij", "Opdrachten", "Teams", "In teams", "Rubrics"], ...U.rijen.map((r) => [r.tekst, r.n, r.aantalTeams, r.teams.join(", "), r.rubrics.join(", ")])];
     const kv = this.klassen(TT).klasVan;
-    const L = [["Rubric-rij", "Leerling", "Klas", "Gemiddeld", "Team", "Opdracht", "Niveau", "Punten"], ...U.rijen.filter((r) => r.gedeeld).flatMap((r) => TT_ANALYSE.rijNiveaus(this._data, r, { klasVan: kv }).flatMap((x) => x.beoordelingen.map((b) => [r.tekst, x.naam, x.klas, p(x.gemiddeld), b.klas, b.opdracht, b.niveau, b.punten ?? ""])))];
+    const L = [["Rubric-rij", "Leerling", "Klas", "Gemiddeld", "Team", "Opdracht", "Niveau", "Punten"], ...U.rijen.filter((r) => r.gedeeld).flatMap((r) => TT_ANALYSE.rijNiveaus(this.zichtbareData(), r, { klasVan: kv }).flatMap((x) => x.beoordelingen.map((b) => [r.tekst, x.naam, x.klas, p(x.gemiddeld), b.klas, b.opdracht, b.niveau, b.punten ?? ""])))];
     return [["Rubric-rijen", R], ["Rubric-niveaus per leerling", L]];
   },
   exportAlles(TT) {

@@ -190,3 +190,10 @@ a.tt-btn { text-decoration: none; }
 .tt-sorteer-knop { font: 500 11px var(--tt-font); padding: 4px 9px; border: 0; border-radius: 999px; background: var(--tt-panel-bg); color: var(--tt-muted); cursor: pointer; }
 .tt-sorteer-knop.is-on { background: var(--tt-accent); color: #fff; }
 .tt-sorteer-knop:focus-visible { outline: 2px solid var(--tt-gold); outline-offset: 2px; }
+.tt-verberg { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border: 0; border-radius: 50%; background: var(--tt-panel-bg); color: var(--tt-muted); font: 600 13px/20px var(--tt-font); cursor: pointer; opacity: 0; transition: opacity .12s; padding: 0; }
+.tt-rij, .tt-kaart { position: relative; }
+.tt-rij:hover .tt-verberg, .tt-rij:focus-within .tt-verberg, .tt-kaart:hover .tt-verberg, .tt-kaart:focus-within .tt-verberg { opacity: 1; }
+.tt-verberg:hover { background: var(--tt-err); color: #fff; }
+.tt-rij .tt-verberg { position: static; margin-left: 2px; }
+.tt-rij { grid-template-columns: 1fr auto auto auto; }
+.tt-btn-accent { background: color-mix(in srgb, var(--tt-accent) 14%, var(--tt-card)); color: var(--tt-accent); }
