@@ -200,4 +200,43 @@ assert.equal(N[0].naam, "Aisha");
 assert.deepEqual(N[0].beoordelingen.map((b) => [b.klas, b.niveau, b.pct]), [["MIP26A - Rekenen", "Voldoende", 0.5], ["MIP26A - Engels", "Goed", 1]]);
 assert.equal(N[0].gemiddeld, 0.75);
 
+// Cijfer uit percentage: cesuur 55% = 5,5, lineair.
+assert.equal(A.naarCijfer(0.55), 6);                                  // heel: 5,5 → 6
+assert.equal(A.naarCijfer(0.55, { afronding: "decimaal" }), 5.5);
+assert.equal(A.naarCijfer(1, { afronding: "decimaal" }), 10);
+assert.equal(A.naarCijfer(0, { afronding: "decimaal" }), 1);
+assert.equal(A.naarCijfer(0.275, { afronding: "decimaal" }), 3.3);     // halverwege onder de cesuur: 1 + 2,25
+assert.equal(A.naarCijfer(null), null);
+
+// Rapport: klas MR26A met twee vakteams, twee periodes, studentnummer uit e-mail, cohort/leerjaar uit de klascode.
+const rp = {
+  classes: [{ id: "t1", displayName: "MR26A - Journalistiek" }, { id: "t2", displayName: "MR26A - Tekst" }, { id: "t3", displayName: "MR25A - Tekst" }],
+  members: { t1: [{ id: "u1", displayName: "Julia Ypey", mail: "40887@student.ma-web.nl", givenName: "Julia", surname: "Ypey" }], t2: [{ id: "u1", displayName: "Julia Ypey", mail: "40887@student.ma-web.nl" }], t3: [{ id: "u2", displayName: "Bram Bos", mail: "40001@student.ma-web.nl" }] },
+  categorieen: { t1: [{ id: "c1", naam: "Toetsen", gewicht: 100 }] },
+  assignments: [
+    { id: "a1", classId: "t1", displayName: "Artikel 1", status: "assigned", dueDateTime: d("2026-09-15T00:00:00Z"), grading: { maxPoints: 10 }, categorie: { id: "c1" } },
+    { id: "a2", classId: "t1", displayName: "Artikel 2", status: "assigned", dueDateTime: d("2026-09-20T00:00:00Z"), grading: { maxPoints: 10 }, categorie: null },
+    { id: "a3", classId: "t2", displayName: "Tekst 1", status: "assigned", dueDateTime: d("2026-11-01T00:00:00Z"), grading: { maxPoints: 20 } }
+  ],
+  submissions: {
+    a1: [{ id: "s1", status: "returned", recipient: { userId: "u1" }, outcomes: [{ "@odata.type": "#microsoft.graph.educationPointsOutcome", points: { points: 8 } }] }],
+    a2: [{ id: "s2", status: "returned", recipient: { userId: "u1" }, outcomes: [{ "@odata.type": "#microsoft.graph.educationPointsOutcome", points: { points: 2 } }] }],
+    a3: [{ id: "s3", status: "returned", recipient: { userId: "u1" }, outcomes: [{ "@odata.type": "#microsoft.graph.educationPointsOutcome", points: { points: 11 } }] }]
+  }, namen: {}
+};
+const Kr = A.klassen(rp, { patroon: PAT });
+const R2 = A.rapport(rp, { nu, periodes: [{ naam: "Periode 1.1", begin: "2026-08-24", einde: "2026-10-31" }, { naam: "Periode 1.2", begin: "2026-11-01", einde: "2027-01-31" }, { naam: "Periode 1.3", begin: "2027-02-01", einde: "2027-04-15" }],
+  klasVan: Kr.klasVan, teamKlas: Kr.teamKlas, patroon: PAT, opleidingen: { MR: "Mediaredactiemedewerker" }, vakgroepen: [{ naam: "Praktijkvakken", vakken: ["Journalistiek", "Tekst"] }], afronding: "decimaal" });
+assert.deepEqual(R2.periodes, ["Periode 1.1", "Periode 1.2"]);        // periode 1.3 is nog niet begonnen
+const ju = R2.leerlingen.find((l) => l.id === "u1");
+assert.equal(ju.studentnummer, "40887");
+assert.equal(ju.roepnaam, "Julia"); assert.equal(ju.achternaam, "Ypey");
+assert.equal(ju.klas, "MR26A"); assert.equal(ju.opleiding, "Mediaredactiemedewerker"); assert.equal(ju.cohort, 2026); assert.equal(ju.jaar, 1);
+assert.equal(R2.leerlingen.find((l) => l.id === "u2").jaar, 2);
+assert.deepEqual(ju.groepen.map((g) => g.naam), ["Praktijkvakken"]);
+const jour = ju.vakken.find((v) => v.vak === "Journalistiek");
+assert.equal(jour.periodes[0].cijfer, 8);                              // alleen de gewogen categorie telt: 8/10 → 0,8 → 5,5 + 4,5 × 0,25/0,45 = 8,0
+assert.equal(jour.periodes[1].cijfer, null);
+assert.equal(ju.vakken.find((v) => v.vak === "Tekst").periodes[1].cijfer, 5.5);  // 11/20 = 55% → cesuur
+
 console.log("analyse.test.js: alles in orde");

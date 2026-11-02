@@ -80,6 +80,26 @@
    * Per team: gemiddelde per cijfercategorie (percentage van de max. punten) en het gewogen gemiddelde
    * volgens de wegingen van de klas (data.categorieen[classId]), genormaliseerd over categorieën waarin
    * de leerling cijfers heeft. Zonder wegingen is gewogen = gewoon gemiddelde. */
+  /* Gemiddelde van een reeks cijfers (items met pct en catId) volgens de categorieën van de klas. */
+  function teamGemiddelde(items, cats = []) {
+    const perCat = new Map();
+    for (const it of items) { const k = it.catId || ""; if (!perCat.has(k)) perCat.set(k, []); perCat.get(k).push(it.pct); }
+    const categorieen = [...perCat.entries()].map(([id, ps]) => { const c = cats.find((x) => x.id === id); return { id, naam: c?.naam || items.find((x) => x.catId === id)?.catNaam || (id ? "Onbekend" : "Zonder categorie"), gewicht: c?.gewicht ?? null, n: ps.length, gemiddeld: gem(ps) }; }).sort((a, b) => (b.gewicht || 0) - (a.gewicht || 0) || a.naam.localeCompare(b.naam, "nl"));
+    const gewogenCats = categorieen.filter((c) => c.gewicht > 0);
+    const somG = gewogenCats.reduce((a, c) => a + c.gewicht, 0);
+    const gewogen = somG > 0 ? gewogenCats.reduce((a, c) => a + c.gemiddeld * c.gewicht, 0) / somG : null;
+    const gemiddeld = gem(items.map((x) => x.pct));
+    return { n: items.length, gemiddeld, gewogen, eind: gewogen ?? gemiddeld, categorieen };
+  }
+  /* Percentage → cijfer 1–10 met cesuur (standaard 55% = 5,5), lineair aan beide kanten. */
+  function naarCijfer(pct, { cesuur = 0.55, afronding = "heel" } = {}) {
+    if (pct == null || isNaN(pct)) return null;
+    const c = Math.min(0.95, Math.max(0.05, cesuur));
+    let x = pct >= c ? 5.5 + 4.5 * (pct - c) / (1 - c) : 1 + 4.5 * pct / c;
+    x = Math.min(10, Math.max(1, x));
+    return afronding === "decimaal" ? Math.round(x * 10) / 10 : Math.round(x);
+  }
+
   function cijfers(data, opties = {}) {
     const nu = opties.nu || Date.now();
     const klassen = new Map((data.classes || []).map((c) => [c.id, c]));
@@ -102,15 +122,7 @@
     const leerlingen = [...per.entries()].map(([uid, m]) => {
       const perTeam = {};
       for (const [classId, items] of m) {
-        const cats = data.categorieen?.[classId] || [];
-        const perCat = new Map();
-        for (const it of items) { const k = it.catId || ""; if (!perCat.has(k)) perCat.set(k, []); perCat.get(k).push(it.pct); }
-        const categorieen = [...perCat.entries()].map(([id, ps]) => { const c = cats.find((x) => x.id === id); return { id, naam: c?.naam || items.find((x) => x.catId === id)?.catNaam || (id ? "Onbekend" : "Zonder categorie"), gewicht: c?.gewicht ?? null, n: ps.length, gemiddeld: gem(ps) }; }).sort((a, b) => (b.gewicht || 0) - (a.gewicht || 0) || a.naam.localeCompare(b.naam, "nl"));
-        const gewogenCats = categorieen.filter((c) => c.gewicht > 0);
-        const somG = gewogenCats.reduce((a, c) => a + c.gewicht, 0);
-        const gewogen = somG > 0 ? gewogenCats.reduce((a, c) => a + c.gemiddeld * c.gewicht, 0) / somG : null;
-        const gemiddeld = gem(items.map((x) => x.pct));
-        perTeam[classId] = { klas: klassen.get(classId)?.displayName || classId, n: items.length, gemiddeld, gewogen, eind: gewogen ?? gemiddeld, categorieen, opdrachten: items.sort((a, b) => (b.due || 0) - (a.due || 0)) };
+        perTeam[classId] = { klas: klassen.get(classId)?.displayName || classId, ...teamGemiddelde(items, data.categorieen?.[classId] || []), opdrachten: items.sort((a, b) => (b.due || 0) - (a.due || 0)) };
       }
       const eind = Object.values(perTeam).map((t) => t.eind);
       return { id: uid, naam: naam(uid), klas: opties.klasVan?.[uid] || "", teams: perTeam, aantalTeams: eind.length, totaal: gem(eind), n: Object.values(perTeam).reduce((a, t) => a + t.n, 0) };
@@ -326,7 +338,78 @@
     return { klassen: uit, klasVan, teamKlas };
   }
 
-  const API = { bouw, beoordeel, periodeBereik, naarTabellen, klassen, cijfers, rubrics, rijNiveaus, actieveOpdrachten };
+  /* ---------- Rapport per leerling ----------
+   * opties: { periodes: [{ naam, begin: "JJJJ-MM-DD", einde }], klasVan, teamKlas, klassen (Set van teamIds),
+   *   patroon (klascode-regex), opleidingen: { MR: "Mediaredactiemedewerker" }, vakgroepen: [{ naam, vakken: [] }],
+   *   cesuur, afronding, schooljaarStart (Date), alleenKlassen (Set van klasnamen) }
+   * Vak = teamnaam zonder klascode. Cijfer per vak per periode = gewogen gemiddelde van de opdrachten met een
+   * deadline in die periode. Studentnummer = cijfers vóór de @ van het e-mailadres. Cohort en leerjaar uit de
+   * klascode (MIP26A: cohort 2026, leerjaar = schooljaar − cohort + 1). */
+  function rapport(data, opties = {}) {
+    const nu = opties.nu || Date.now();
+    const klassen = new Map((data.classes || []).map((c) => [c.id, c]));
+    const members = Object.values(data.members || {}).flat();
+    const memberNaam = new Map(members.map((m) => [m.id, m.displayName]));
+    const profiel = (uid) => data.profielen?.[uid] || members.find((m) => m.id === uid) || {};
+    const naam = (uid) => data.namen?.[uid] || memberNaam.get(uid) || uid;
+    let re = null; try { if (opties.patroon) re = new RegExp(opties.patroon, "i"); } catch {}
+    const vakNaam = (t) => { const n = t.displayName || ""; const m = re && re.exec(n); if (!m) return n; const rest = n.slice(m.index + m[0].length).trim(); return rest || n; };
+    const periodes = (opties.periodes || []).map((p) => ({ naam: p.naam, begin: ts(p.begin) ?? -Infinity, einde: p.einde ? ts(p.einde) + DAG - 1 : Infinity })).filter((p) => p.begin <= nu).sort((a, b) => a.begin - b.begin);
+    const inPeriode = (a, p) => { const t = ts(a.dueDateTime) ?? ts(a.assignedDateTime); return t != null && t >= p.begin && t <= p.einde; };
+    const sjStart = opties.schooljaarStart ? new Date(opties.schooljaarStart) : new Date(new Date(nu).getMonth() >= 7 ? new Date(nu).getFullYear() : new Date(nu).getFullYear() - 1, 7, 1);
+    const klasInfo = (klas) => {
+      const m = /^([A-Za-z]+)(\d{2})([A-Za-z]?)/.exec(klas || "");
+      if (!m) return { opleidingCode: "", opleiding: "", cohort: null, jaar: null };
+      const cohort = 2000 + parseInt(m[2], 10);
+      const jaar = Math.max(1, sjStart.getFullYear() - cohort + 1);
+      const code = m[1].toUpperCase();
+      return { opleidingCode: code, opleiding: opties.opleidingen?.[code] || code, cohort, jaar };
+    };
+    const groepVan = (vak) => { const v = vak.toLowerCase(); for (const g of opties.vakgroepen || []) if (g.vakken.some((x) => x.toLowerCase() === v)) return g.naam; return (opties.vakgroepen || []).length ? "Overige vakken" : "Vakken"; };
+    // Cijfers per leerling per team per periode.
+    const per = new Map(); // uid -> Map(classId -> Map(periodeIndex -> items))
+    for (const a of actieveOpdrachten(data, { ...opties, periode: "alles" })) {
+      const pi = periodes.findIndex((p) => inPeriode(a, p)); if (pi < 0) continue;
+      for (const sub of data.submissions?.[a.id] || []) {
+        const b = beoordeel(sub, a, nu); if (b.pct == null) continue;
+        const uid = sub.recipient?.userId || "?";
+        if (!per.has(uid)) per.set(uid, new Map());
+        const m = per.get(uid); if (!m.has(a.classId)) m.set(a.classId, new Map());
+        const mm = m.get(a.classId); if (!mm.has(pi)) mm.set(pi, []);
+        mm.get(pi).push({ aid: a.id, opdracht: a.displayName, catId: a.categorie?.id || null, catNaam: a.categorie?.naam || "", pct: b.pct });
+      }
+    }
+    // Welke leerlingen: alle leerlingen van de geselecteerde teams (ook zonder cijfers).
+    const uids = new Set();
+    for (const [classId, ms] of Object.entries(data.members || {})) if (!opties.klassen || opties.klassen.has(classId)) for (const m of ms) uids.add(m.id);
+    for (const uid of per.keys()) uids.add(uid);
+    const leerlingen = [...uids].map((uid) => {
+      const klas = opties.klasVan?.[uid] || "";
+      if (opties.alleenKlassen && !opties.alleenKlassen.has(klas)) return null;
+      const p = profiel(uid);
+      const mail = p.mail || p.userPrincipalName || "";
+      const nr = (/^(\d{4,10})@/.exec(mail) || [])[1] || "";
+      const volledig = naam(uid);
+      const roepnaam = p.givenName || volledig.split(" ")[0] || "";
+      const achternaam = p.surname || volledig.split(" ").slice(1).join(" ") || "";
+      // Teams van de klas van deze leerling (plus teams waar de leerling cijfers heeft).
+      const teamIds = new Set([...(data.classes || []).filter((c) => opties.teamKlas?.[c.id] === klas && (!opties.klassen || opties.klassen.has(c.id)) && (data.members?.[c.id] || []).some((m) => m.id === uid)).map((c) => c.id), ...(per.get(uid)?.keys() || [])]);
+      const vakken = [...teamIds].map((tid) => {
+        const t = klassen.get(tid); if (!t) return null;
+        const vak = vakNaam(t);
+        const perP = periodes.map((pr, i) => { const items = per.get(uid)?.get(tid)?.get(i) || []; const g = teamGemiddelde(items, data.categorieen?.[tid] || []); return { naam: pr.naam, n: items.length, pct: g.eind, cijfer: naarCijfer(g.eind, opties) }; });
+        return { vak, team: t.displayName, teamId: tid, groep: groepVan(vak), periodes: perP, n: perP.reduce((a, x) => a + x.n, 0) };
+      }).filter(Boolean).sort((a, b) => a.groep.localeCompare(b.groep, "nl") || a.vak.localeCompare(b.vak, "nl"));
+      const groepen = [];
+      for (const v of vakken) { let g = groepen.find((x) => x.naam === v.groep); if (!g) { g = { naam: v.groep, vakken: [] }; groepen.push(g); } g.vakken.push(v); }
+      const volgorde = (opties.vakgroepen || []).map((g) => g.naam);
+      groepen.sort((a, b) => { const ia = volgorde.indexOf(a.naam), ib = volgorde.indexOf(b.naam); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.naam.localeCompare(b.naam, "nl"); });
+      return { id: uid, naam: volledig, roepnaam, achternaam, studentnummer: nr, mail, klas, ...klasInfo(klas), vakken, groepen, aantalCijfers: vakken.reduce((a, v) => a + v.n, 0) };
+    }).filter(Boolean).sort((a, b) => a.klas.localeCompare(b.klas, "nl", { numeric: true }) || a.achternaam.localeCompare(b.achternaam, "nl") || a.naam.localeCompare(b.naam, "nl"));
+    return { periodes: periodes.map((p) => p.naam), leerlingen };
+  }
+
+  const API = { bouw, beoordeel, periodeBereik, naarTabellen, klassen, cijfers, rubrics, rijNiveaus, actieveOpdrachten, rapport, naarCijfer, teamGemiddelde };
   globalThis.TT_ANALYSE = API;
   if (typeof module !== "undefined" && module.exports) module.exports = API;
 })();

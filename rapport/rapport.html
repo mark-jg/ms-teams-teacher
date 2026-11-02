@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Rapporten</title>
+<link rel="stylesheet" href="rapport.css">
+</head>
+<body>
+<header class="werkbalk">
+  <div class="werkbalk-links">
+    <strong id="titel">Rapporten</strong>
+    <span id="info" class="muted"></span>
+  </div>
+  <div class="werkbalk-rechts">
+    <label>Klas <select id="klasFilter"><option value="">Alle</option></select></label>
+    <label><input type="checkbox" id="toonLeeg"> Ook vakken zonder cijfer</label>
+    <label><input type="checkbox" id="toonOpm" checked> Opmerkingen</label>
+    <button id="afdrukken" class="primair">Afdrukken of opslaan als PDF</button>
+  </div>
+</header>
+<main id="paginas"></main>
+<p id="leeg" class="leeg" hidden>Geen rapportgegevens gevonden. Open in Teams het overzicht van Docent Tools en kies Rapporten.</p>
+<script src="rapport.js"></script>
+</body>
+</html>

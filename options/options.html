@@ -67,6 +67,24 @@
   </section>
 
   <section>
+    <h2>Rapporten</h2>
+    <p>Rapport per leerling met per vak (team) het cijfer per periode, afdrukbaar in de huisstijl van Mediacollege Amsterdam. Het cijfer is het gewogen gemiddelde van de opdrachten met een deadline in die periode, omgerekend met de cesuur. Studentnummer komt uit het e-mailadres; cohort en leerjaar uit de klascode (MIP26A: cohort 2026).</p>
+    <label class="row" style="align-items:flex-start">Periodes<textarea data-path="rapport.periodes" placeholder="Periode 1.1 | 2026-08-24 | 2026-10-31&#10;Periode 1.2 | 2026-11-01 | 2027-01-31" style="flex:1;min-height:90px;font:13px ui-monospace,monospace"></textarea></label>
+    <p>Per regel: naam | begindatum | einddatum (JJJJ-MM-DD). Alleen periodes die al begonnen zijn komen op het rapport.</p>
+    <label class="row" style="align-items:flex-start">Opleidingen<textarea data-path="rapport.opleidingen" style="flex:1;min-height:70px;font:13px ui-monospace,monospace"></textarea></label>
+    <p>Per regel: code uit de klascode = naam, bijvoorbeeld <kbd>MR = Mediaredactiemedewerker</kbd>.</p>
+    <label class="row" style="align-items:flex-start">Vakgroepen<textarea data-path="rapport.vakgroepen" placeholder="Praktijkvakken: Journalistiek, Interviewen, Tekst, Techniek&#10;AVO-vakken en BUR: Rekenen, Engels, Nederlands, BUR" style="flex:1;min-height:70px;font:13px ui-monospace,monospace"></textarea></label>
+    <p>Per regel: groep: vak, vak, … (vaknaam = teamnaam zonder klascode). Vakken die nergens staan komen onder "Overige vakken"; zonder groepen staat alles onder "Vakken".</p>
+    <label class="row">Cesuur (percentage voor een 5,5) <input type="number" min="5" max="95" data-path="rapport.cesuur" data-type="int"> %</label>
+    <label class="row">Afronding <select data-path="rapport.afronding"><option value="heel">Hele cijfers</option><option value="decimaal">Eén decimaal</option></select></label>
+    <label class="row">Titel <input type="text" data-path="rapport.titel" style="flex:1"> </label>
+    <p>{jaar}, {klas}, {cohort} en {schooljaar} worden ingevuld.</p>
+    <label class="row">Logo op het rapport <input type="file" id="logoBestand" accept="image/png,image/jpeg,image/svg+xml"> <button id="logoWissen">Wissen</button> <span id="logoStatus" style="font-size:13px;color:var(--muted)"></span></label>
+    <p>Kies het officiële logo (horizontaal, kleur op wit) uit de huisstijlmap; het blijft lokaal in de extensie bewaard. Zonder keuze gebruikt het rapport <code>rapport/ma-logo.jpg</code> uit de extensiemap als dat bestand er staat, en anders het woordmerk als tekst.</p>
+    <label class="row" style="align-items:flex-start">Toelichting<textarea data-path="rapport.toelichting" placeholder="Bijvoorbeeld: de student krijgt in periode 2 een positief studieadvies als…" style="flex:1;min-height:90px"></textarea></label>
+  </section>
+
+  <section>
     <h2>Ontwikkelaar <label class="switch"><input type="checkbox" data-path="developer.enabled"><span></span></label></h2>
     <p>Toont in het zijpaneel de Inspector: welke frames de Teams-pagina heeft, welke tokens er zijn (alleen host en scopes, nooit het token zelf) en welke API-calls Teams doet. Het rapport is geanonimiseerd en te kopiëren om samen nieuwe analyses te bouwen.</p>
   </section>

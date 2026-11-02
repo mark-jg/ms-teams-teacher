@@ -25,7 +25,7 @@ TT.register({
     if (!("me" in d)) d.me = null;
     d.volledigAt ??= d.at;
     for (const c of d.classes) { c.isArchived ??= false; c.specialization ??= null; c.eigenaar ??= null; c.createdDateTime ??= null; c.opgehaald ??= true; }
-    d.members ??= {}; d.submissions ??= {}; d.namen ??= {}; d.fouten ??= []; d.categorieen ??= {}; d.rubrics ??= {};
+    d.members ??= {}; d.submissions ??= {}; d.namen ??= {}; d.fouten ??= []; d.categorieen ??= {}; d.rubrics ??= {}; d.profielen ??= {};
     return d;
   },
   saveFilter() {
@@ -159,16 +159,18 @@ TT.register({
     const klassen = classes.filter((c) => c.klas);
     voortgang(`Leden ophalen (${klassen.length} klassen)…`, 0.24);
     const members = {};
-    const proef = await TT.graph(`/education/classes/${klassen[0].id}/members?$select=id,displayName,primaryRole`);
+    const velden = "id,displayName,mail,userPrincipalName,givenName,surname";
+    const proef = await TT.graph(`/education/classes/${klassen[0].id}/members?$select=${velden},primaryRole`);
     const rosterOk = proef.status === 200;
-    const mem = await TT.graphMany(klassen.map((c) => ({ key: c.id, url: rosterOk ? `/education/classes/${c.id}/members?$select=id,displayName,primaryRole` : `/groups/${c.id}/members?$select=id,displayName` })));
+    const mem = await TT.graphMany(klassen.map((c) => ({ key: c.id, url: rosterOk ? `/education/classes/${c.id}/members?$select=${velden},primaryRole` : `/groups/${c.id}/members?$select=${velden}` })));
+    const lid = (u, rol) => ({ id: u.id, displayName: u.displayName, primaryRole: rol, mail: u.mail || "", userPrincipalName: u.userPrincipalName || "", givenName: u.givenName || "", surname: u.surname || "" });
     for (const c of klassen) {
       const m = mem.get(c.id);
       if (m?.status !== 200) { members[c.id] = oud?.members?.[c.id] || []; continue; }
       const owners = ownersVan.get(c.id) || new Set();
       members[c.id] = rosterOk
-        ? m.value.filter((u) => (u.primaryRole || "student") === "student").map((u) => ({ id: u.id, displayName: u.displayName, primaryRole: u.primaryRole }))
-        : m.value.filter((u) => !owners.has(u.id) && /user$/i.test(u["@odata.type"] || "#microsoft.graph.user")).map((u) => ({ id: u.id, displayName: u.displayName, primaryRole: "student" }));
+        ? m.value.filter((u) => (u.primaryRole || "student") === "student").map((u) => lid(u, u.primaryRole))
+        : m.value.filter((u) => !owners.has(u.id) && /user$/i.test(u["@odata.type"] || "#microsoft.graph.user")).map((u) => lid(u, "student"));
     }
 
     // 4. Inleveringen, alleen voor recente, actieve opdrachten; oude inleveringen hergebruiken.
@@ -221,17 +223,17 @@ TT.register({
     // 5. Namen van leerlingen die niet (meer) lid zijn.
     const bekend = new Set(Object.values(members).flat().map((u) => u.id));
     const onbekend = [...new Set(Object.values(submissions).flat().map((s) => s.recipient.userId).filter((u) => u && !bekend.has(u)))];
-    const namen = { ...(oud?.namen || {}) };
-    const nogOp = onbekend.filter((u) => !namen[u]);
+    const namen = { ...(oud?.namen || {}) }, profielen = { ...(oud?.profielen || {}) };
+    const nogOp = onbekend.filter((u) => !namen[u] || !profielen[u]);
     if (nogOp.length) {
-      voortgang(`Namen ophalen (${nogOp.length})…`, 0.92);
-      const res = await TT.graphMany(nogOp.map((id) => ({ key: id, url: `/users/${id}?$select=id,displayName` })), { prefer: "User.Read" });
-      for (const [id, r] of res) if (r.status === 200 && r.json?.displayName) namen[id] = r.json.displayName;
+      voortgang(`Namen ophalen (${nogOp.length})…`, 0.96);
+      const res = await TT.graphMany(nogOp.map((id) => ({ key: id, url: `/users/${id}?$select=${velden}` })), { prefer: "User.Read" });
+      for (const [id, r] of res) if (r.status === 200 && r.json?.displayName) { namen[id] = r.json.displayName; profielen[id] = lid(r.json, "student"); }
     }
     const fouten = [...classes.filter((c) => c.fout).map((c) => `${c.displayName}: ${c.fout}`), ...actief.filter((a) => a.fout).map((a) => `${a.displayName}: ${a.fout}`)];
     const data = { schema: 4, at: Date.now(), volledigAt: oud ? oud.volledigAt || oud.at : Date.now(), hergebruikt, bron, rosterOk, me, weggelaten, totaalTeams, nietKlas: eerder - classes.length,
       classes: classes.map(({ id, displayName, classCode, externalName, isArchived, specialization, eigenaar, createdDateTime, opgehaald }) => ({ id, displayName, classCode, externalName, isArchived: !!isArchived, specialization: specialization || null, eigenaar: eigenaar ?? null, createdDateTime: createdDateTime || null, opgehaald: !!opgehaald })),
-      members, assignments, submissions, categorieen, rubrics, namen, fouten };
+      members, assignments, submissions, categorieen, rubrics, namen, profielen, fouten };
     this._data = data;
     voortgang("Opslaan…", 0.98);
     try { await chrome.storage.local.set({ ttData: data }); }
@@ -268,6 +270,63 @@ TT.register({
     const r = this.analyse(TT);
     if (this._rubricsCache?.r !== r) this._rubricsCache = { r, u: TT_ANALYSE.rubrics(this._data, { periode: this._filter.periode, klassen: this.selectie() }) };
     return this._rubricsCache.u;
+  },
+  /* ---------- Rapporten ---------- */
+  rapportInstellingen(TT) {
+    const r = TT.settings.rapport || {};
+    const regels = (t) => String(t || "").split("\n").map((x) => x.trim()).filter(Boolean);
+    const periodes = regels(r.periodes).map((x) => x.split("|").map((y) => y.trim())).filter((p) => p.length >= 2).map(([naam, begin, einde]) => ({ naam, begin, einde: einde || "" }));
+    const opleidingen = {}; for (const x of regels(r.opleidingen)) { const m = /^([A-Za-z]+)\s*[=:]\s*(.+)$/.exec(x); if (m) opleidingen[m[1].toUpperCase()] = m[2].trim(); }
+    const vakgroepen = regels(r.vakgroepen).map((x) => { const i = x.indexOf(":"); if (i < 0) return null; return { naam: x.slice(0, i).trim(), vakken: x.slice(i + 1).split(",").map((v) => v.trim()).filter(Boolean) }; }).filter(Boolean);
+    return { periodes, opleidingen, vakgroepen, cesuur: Math.min(0.95, Math.max(0.05, (parseFloat(r.cesuur) || 55) / 100)), afronding: r.afronding === "decimaal" ? "decimaal" : "heel", toelichting: r.toelichting || "", titel: r.titel || "Resultaten jaar {jaar}" };
+  },
+  /* Keuzevenster: klassen en periodes, dan de afdrukbare rapporten openen of naar Excel. */
+  rapportDialoog(TT) {
+    document.getElementById("tt-rapport")?.remove();
+    const inst = this.rapportInstellingen(TT);
+    const K = this.klassen(TT);
+    const klassen = K.klassen.filter((k) => k.leerlingen.length);
+    const box = TT.el("div", { id: "tt-rapport", role: "dialog", "aria-label": "Rapporten" });
+    const sluit = () => { box.remove(); document.removeEventListener("keydown", esc, true); };
+    const esc = (e) => { if (e.key === "Escape") { e.stopPropagation(); sluit(); } };
+    document.addEventListener("keydown", esc, true);
+    const kl = klassen.map((k) => { const cb = TT.el("input", { type: "checkbox" }); cb.checked = !this._filter.klas || this._filter.klas === k.naam; return { k, cb, row: TT.el("label", { class: "tt-kiezer-rij" }, [cb, TT.el("span", {}, [k.naam, TT.el("small", { text: `${k.leerlingen.length} leerlingen · ${k.teams.length} teams` })])]) }; });
+    const nu = Date.now();
+    const pr = inst.periodes.map((p) => { const cb = TT.el("input", { type: "checkbox" }); cb.checked = new Date(p.begin).getTime() <= nu; return { p, cb, row: TT.el("label", { class: "tt-kiezer-rij" }, [cb, TT.el("span", {}, [p.naam, TT.el("small", { text: `${p.begin} t/m ${p.einde || "…"}` })])]) }; });
+    const afr = TT.el("select", { class: "tt-select" }, [["heel", "Hele cijfers"], ["decimaal", "Eén decimaal"]].map(([v, l]) => TT.el("option", { value: v, text: l }))); afr.value = inst.afronding;
+    const status = TT.el("div", { class: "tt-muted", style: "margin-top:8px" });
+    const maak = () => {
+      const alleenKlassen = new Set(kl.filter((x) => x.cb.checked).map((x) => x.k.naam));
+      const periodes = pr.filter((x) => x.cb.checked).map((x) => x.p);
+      if (!alleenKlassen.size) { status.textContent = "Kies minstens één klas."; return null; }
+      if (!periodes.length) { status.textContent = "Kies minstens één periode (instellen bij Instellingen › Rapporten)."; return null; }
+      const r = TT_ANALYSE.rapport(this._data, { periodes, klasVan: K.klasVan, teamKlas: K.teamKlas, klassen: this.selectie(), patroon: this.patroon(TT), opleidingen: inst.opleidingen, vakgroepen: inst.vakgroepen, cesuur: inst.cesuur, afronding: afr.value, alleenKlassen, schooljaarStart: this.schooljaarStart() });
+      if (!r.leerlingen.length) { status.textContent = "Geen leerlingen in deze klassen."; return null; }
+      const sj = this.schooljaarStart().getFullYear();
+      return { ...r, gemaakt: Date.now(), titel: inst.titel, toelichting: inst.toelichting, cesuur: inst.cesuur, afronding: afr.value, schooljaar: `${sj}-${sj + 1}` };
+    };
+    const open = TT.el("button", { class: "tt-btn tt-btn-primary", text: "Rapporten openen (afdrukbaar)", onclick: () => TT.guard(async () => {
+      const r = maak(); if (!r) return;
+      await chrome.storage.local.set({ ttRapport: r });
+      window.open(chrome.runtime.getURL("rapport/rapport.html"), "_blank");
+      sluit();
+    }, "Rapporten") });
+    const excel = TT.el("button", { class: "tt-btn", text: "Naar Excel", onclick: () => TT.guard(() => {
+      const r = maak(); if (!r) return;
+      const f = (c) => (c == null ? "" : c);
+      const rows = [["Studentnummer", "Roepnaam", "Achternaam", "Klas", "Opleiding", "Cohort", "Leerjaar", "Groep", "Vak", "Team", ...r.periodes.flatMap((p) => [p, `${p} (aantal)`])],
+        ...r.leerlingen.flatMap((l) => l.vakken.map((v) => [l.studentnummer, l.roepnaam, l.achternaam, l.klas, l.opleiding, f(l.cohort), f(l.jaar), v.groep, v.vak, v.team, ...v.periodes.flatMap((p) => [f(p.cijfer), p.n])]))];
+      const overz = [["Studentnummer", "Roepnaam", "Achternaam", "Klas", "Opleiding", "Cohort", "Leerjaar", "E-mail", "Aantal cijfers"], ...r.leerlingen.map((l) => [l.studentnummer, l.roepnaam, l.achternaam, l.klas, l.opleiding, f(l.cohort), f(l.jaar), l.mail, l.aantalCijfers])];
+      TT.toXlsx([["Rapportcijfers", rows], ["Leerlingen", overz]], "rapporten");
+    }, "Rapporten naar Excel") });
+    box.append(
+      TT.el("div", { class: "tt-row", style: "justify-content:space-between;margin-bottom:6px" }, [TT.el("b", { text: "Rapporten" }), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Sluiten", onclick: sluit })]),
+      TT.el("div", { class: "tt-muted", text: "Klassen" }), TT.el("div", { class: "tt-kiezer-lijst", style: "max-height:30vh" }, kl.map((x) => x.row)),
+      TT.el("div", { class: "tt-muted", style: "margin-top:8px", text: "Periodes" }), pr.length ? TT.el("div", { class: "tt-kiezer-lijst", style: "max-height:22vh" }, pr.map((x) => x.row)) : TT.el("p", { class: "tt-muted", text: "Nog geen periodes ingesteld. Ga naar Instellingen › Rapporten en zet per regel: naam | begindatum | einddatum." }),
+      TT.el("div", { class: "tt-row", style: "margin-top:8px" }, [afr, TT.el("span", { class: "tt-muted", text: `cesuur ${Math.round(inst.cesuur * 100)}%` }), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Instellingen", onclick: () => chrome.runtime.sendMessage({ type: "openOptions" }) })]),
+      TT.el("div", { class: "tt-row", style: "margin-top:10px" }, [open, excel]), status
+    );
+    document.body.append(box);
   },
   /* Per afgeleide klas de totalen van haar leerlingen. */
   klasOverzicht(TT, r) {
@@ -379,6 +438,7 @@ TT.register({
       TT.el("h2", { text: "Opdrachten over alle teams" }), tabs,
       TT.el("button", { class: "tt-btn tt-btn-sm", text: "Dit tabblad naar Excel", onclick: () => this.exportTab(TT) }),
       TT.el("button", { class: "tt-btn tt-btn-sm", text: "Alles naar Excel", onclick: () => this.exportAlles(TT) }),
+      TT.el("button", { class: "tt-btn tt-btn-sm", text: "Rapporten", title: "Rapport per leerling: cijfers per vak per periode, afdrukbaar in de huisstijl", onclick: () => TT.guard(() => this.rapportDialoog(TT), "Rapporten") }),
       TT.el("button", { class: "tt-btn tt-btn-sm", text: "Bijwerken", title: `Opgehaald ${TT.fmtDateTime(this._data.at)}. Haalt alleen op wat kan veranderen; Alt+klik haalt alles opnieuw op.`, onclick: (e) => this.bijwerken(TT, { volledig: e.altKey }) }),
       TT.el("button", { class: "tt-btn tt-btn-sm", text: "Sluiten", onclick: () => this.close() })
     ]);

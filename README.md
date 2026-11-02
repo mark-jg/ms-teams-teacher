@@ -1,4 +1,4 @@
-# Docent Tools voor Teams (v0.4.0)
+# Docent Tools voor Teams (v0.5.0)
 
 Chrome-extensie voor Microsoft Teams (web) voor docenten: team-overstijgende analyses van opdrachten. Alles draait lokaal in je browser; er wordt niets naar een eigen server gestuurd. Zusje van [Docent Tools voor Magister](https://github.com/mark-jg/magister-docent), met dezelfde opzet.
 
@@ -20,6 +20,7 @@ Werkt ook in Edge (`edge://extensions`). Na elke update of herlaad van de extens
 | **Opdrachten over alle teams**: per klas (afgeleid uit wie samen in dezelfde teams zit), per team, per leerling (over al je teams heen), per opdracht, komende deadlines, nakijkwerk en signalen | Alt+O, of via het zijpaneel of het extensie-icoon |
 | **Cijfers**: per leerling het gemiddelde per team, gewogen volgens de cijfercategorieën van dat team, plus een totaal; klik voor categorieën en opdrachten | tabblad Cijfers |
 | **Rubrics**: rubric-rijen die in meerdere opdrachten of teams voorkomen, met per leerling het gekozen niveau over al die voorkomens | tabblad Rubrics |
+| **Rapporten**: per leerling een A4-rapport met cijfers per vak per periode, studentnummer, klas, opleiding, cohort en leerjaar, afdrukbaar (ook naar PDF) in de huisstijl van Mediacollege Amsterdam; opmerkingen per periode typ je in het rapport zelf | knop Rapporten in het overzicht |
 | Export naar Excel: het geopende tabblad of alles in één werkmap (zes bladen, inclusief alle inleveringen) | knoppen bovenin het overzicht |
 | Filters: klassen (automatisch of zelf gekozen, wordt onthouden), periode (schooljaar, 90 dagen, 30 dagen, alles), "Alleen problemen", zoeken; sorteren door op een kolomkop te klikken | bovenin het overzicht |
 | Zijpaneel met status van de koppeling, modules aan/uit en thema | Alt+K of het handvat |
@@ -51,6 +52,17 @@ Standaard bepaalt de extensie dat automatisch met vier signalen uit Graph: is he
 **Cijfers** toont per leerling en per team het gemiddelde als percentage van de maximale punten. Heeft het team cijfercategorieën met een weging (Opdrachten › Instellingen in Teams), dan wordt het gemiddelde per categorie berekend en gewogen opgeteld, genormaliseerd over de categorieën waarin de leerling cijfers heeft; opdrachten zonder categorie staan wel in de lijst maar tellen niet mee in de weging. Zonder wegingen geldt het gewone gemiddelde. Totaal is het gemiddelde over de teams. Rood onder 55%, oranje onder 70%.
 
 **Rubrics** haalt per opdracht de rubric op en herkent rijen (criteria) op hun tekst, zonder leestekens en hoofdletters. Rijen die in meerdere opdrachten of teams voorkomen zijn "gedeeld": klik erop en je ziet per leerling het gekozen niveau in elke opdracht, met een gemiddelde (punten van het niveau gedeeld door de hoogste punten in de rubric; zonder punten de positie van het niveau). Zo is een rij als "Samenwerken" over vakken heen te volgen. Het Excel-blad Rubric-niveaus per leerling bevat alles.
+
+### Rapporten
+
+De knop **Rapporten** opent een keuzevenster: klassen, periodes en afronding. **Rapporten openen** maakt een afdrukbare pagina met één A4 per leerling; **Naar Excel** geeft dezelfde cijfers als tabel. Op het rapport staan:
+
+- Opleiding en titel (bijvoorbeeld "Resultaten jaar 1"), met het logo van Mediacollege Amsterdam.
+- Studentnummer (de cijfers vóór de @ van het e-mailadres), roepnaam, achternaam, klas, cohort en leerjaar. Cohort en leerjaar komen uit de klascode: MIP26A is cohort 2026, en in schooljaar 2026-2027 leerjaar 1.
+- Per vak (teamnaam zonder klascode) het cijfer per periode: het gewogen gemiddelde van de opdrachten met een deadline in die periode, omgerekend naar een cijfer met de cesuur (standaard 55% = 5,5, lineair naar 1 en 10). Onvoldoendes in magenta. Vakken zijn te groeperen (bijvoorbeeld Praktijkvakken en AVO-vakken).
+- Een vaste toelichting en per periode een vak voor opmerkingen, dat je in het rapport typt; opmerkingen worden per leerling en periode bewaard.
+
+Periodes, opleidingen, vakgroepen, cesuur, afronding, titel en toelichting staan bij Instellingen › Rapporten. De opmaak volgt het Mediacollege Design System: wit, zwart en magenta als enig accent, dunne hairlines, tekstkaders; Aeonik is een gelicentieerd lettertype, dus de pagina gebruikt de voorgeschreven vervanging Arial (en Georgia voor de titel). Het logo is ook een merkbestand en zit niet in deze repo: kies het bij Instellingen › Rapporten (blijft lokaal), of zet het officiële horizontale logo als `rapport/ma-logo.jpg` in de extensiemap; anders staat het woordmerk als tekst. Aanwezigheid staat niet in Teams en dus niet op het rapport.
 
 Concept- en ingeplande opdrachten tellen niet mee. Vrijstelling (excused) telt niet als ontbrekend en niet mee in het gemiddelde.
 
@@ -90,6 +102,7 @@ Het zijpaneel toont onder **Koppeling** wat er aan de hand is:
 
 ## Wijzigingen
 
+- 0.5.0: rapporten per leerling (cijfers per vak per periode, studentnummer uit het e-mailadres, klas, opleiding, cohort, leerjaar, opmerkingen per periode), afdrukbaar in de huisstijl van Mediacollege Amsterdam en naar Excel; instellingen voor periodes, opleidingen, vakgroepen, cesuur, afronding, titel en toelichting; e-mailadres en naamdelen van leerlingen worden meegehaald (eerste keer bijwerken haalt leden opnieuw op).
 - 0.4.0: tabblad Cijfers (gemiddelde per leerling per team, gewogen volgens de cijfercategorieën, met totaal en detail per categorie) en tabblad Rubrics (gelijke rubric-rijen over opdrachten en teams heen, met per leerling het gekozen niveau); Excel-bladen Cijfers, Cijfers per categorie, Rubric-rijen en Rubric-niveaus per leerling. Eerste keer bijwerken haalt alles opnieuw op.
 - 0.3.5: klascode vóór het streepje in de teamnaam is nu het standaardpatroon (MIP26A, MR26B, KD25); teams zonder code sluiten via overlap bij elke klas aan, ook een gecodeerde; de klasnaam is de meest voorkomende code in de groep; klassen zonder leerlingen staan niet meer in de keuzelijst en het tabblad.
 - 0.3.4: tabwissel en filters werkten niet meer in een Teams-tabblad dat open stond tijdens een update van de extensie (het opslaan van de keuze gooide een fout); dat opslaan blokkeert nu nooit meer, de extensie meldt dat het tabblad herladen moet worden, en een fout in het overzicht wordt getoond met kopieerbare details.

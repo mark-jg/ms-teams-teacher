@@ -129,3 +129,6 @@ html.tt-dark .tt-knob { background: #39393D; }
 .tt-kiezer-rij small { display: block; color: var(--tt-muted); font-size: 11px; }
 .tt-kiezer-rij.is-dim span { color: var(--tt-muted); }
 .tt-chip-btn { cursor: pointer; padding: 7px 10px; font-size: 12px; }
+
+/* Rapportvenster */
+#tt-rapport { position: fixed; z-index: 2147483100; top: 70px; right: 40px; width: 400px; max-height: 85vh; overflow: auto; padding: 12px; background: var(--tt-card); color: var(--tt-fg); border-radius: 14px; box-shadow: var(--tt-shadow); font: 13px/1.35 var(--tt-font); }
