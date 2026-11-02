@@ -217,14 +217,16 @@ a.tt-btn { text-decoration: none; }
 .tt-raster-label b { display: block; font-weight: 500; white-space: normal; } .tt-raster-label small { display: block; color: var(--tt-muted); font-size: 11px; white-space: normal; }
 .tt-raster-criteria td { font-size: 11px; color: var(--tt-muted); vertical-align: top; white-space: normal; }
 .tt-raster-cel { text-align: center; background: var(--tt-panel-bg); border-radius: 8px; min-width: 56px; height: 30px; }
-.tt-raster-cel.is-gekozen { background: color-mix(in srgb, var(--tt-ok) 22%, var(--tt-card)); box-shadow: inset 0 0 0 2px var(--tt-ok); }
-.tt-raster-cel.is-gekozen.is-laag { background: color-mix(in srgb, var(--tt-err) 18%, var(--tt-card)); box-shadow: inset 0 0 0 2px var(--tt-err); }
+.tt-raster-cel.is-gekozen { --nk: var(--tt-muted); background: color-mix(in srgb, var(--nk) 18%, var(--tt-card)); box-shadow: inset 0 0 0 2px var(--nk); }
+.tt-raster-cel.is-gekozen.is-ok { --nk: var(--tt-ok); } .tt-raster-cel.is-gekozen.is-bad { --nk: var(--tt-err); } .tt-raster-cel.is-gekozen.is-neutraal { --nk: var(--tt-info); }
 .tt-raster-cel.is-leeg { opacity: .45; }
-.tt-stip { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--tt-ok); vertical-align: middle; }
-.is-laag .tt-stip { background: var(--tt-err); }
+.tt-stip { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--nk, var(--tt-info)); vertical-align: middle; }
 .tt-raster tr.is-klik { cursor: pointer; } .tt-raster tr.is-klik:hover td.tt-raster-label { color: var(--tt-accent); }
 .tt-raster-vol .tt-raster-tekst { text-align: left; white-space: normal; font-size: 11px; vertical-align: top; min-width: 120px; height: auto; }
 .tt-raster-vol .tt-raster-tekst .tt-stip { margin-right: 6px; float: left; margin-top: 2px; }
 .tt-rubric.is-ingebed { background: none; box-shadow: none; padding: 0; }
 .tt-rij-rubric { grid-template-columns: minmax(160px, 1fr) auto auto; }
 .tt-rij-rubric .tt-rij-rechts { max-width: 60%; }
+.tt-niveau { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; white-space: nowrap; --nk: var(--tt-info); }
+.tt-niveau.is-ok { --nk: var(--tt-ok); } .tt-niveau.is-bad { --nk: var(--tt-err); color: var(--tt-err); font-weight: 600; } .tt-niveau.is-neutraal { --nk: var(--tt-info); }
+.tt-niveau small { color: var(--tt-muted); font-size: 10px; }

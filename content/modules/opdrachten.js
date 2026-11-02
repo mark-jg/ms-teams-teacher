@@ -899,7 +899,7 @@ TT.register({
           sig ? TT.el("div", { class: "tt-signaal" }, [TT.el("b", { text: "Signaal: " }), `${sig.redenen.join(", ")}${sig.klassenMetProbleem.length ? " · in " + sig.klassenMetProbleem.map((x) => this.vakVan(TT, x)).join(", ") : ""}`]) : null,
           TT.el("div", { style: "margin:0 0 12px" }, tabs),
           ...(tab === "vakken" ? [U.sectie("Per vak", vakTabel, "Klik op een kolomkop om te sorteren, op een rij voor de opdrachten en categorieën.")] : [
-            LR.gedeeld.length ? U.sectie("Over vakken heen", TT.el("div", { class: "tt-lijst" }, LR.gedeeld.map((rij) => this.rubricRijCompact(TT, rij))), "Per gedeelde rij het gekozen niveau per vak. Klik voor het raster met alle niveaus en omschrijvingen.") : null,
+            (() => { const M = this.rubricMatrix(TT, LR); return M ? U.sectie("Rubric-rijen per vak", M, "Rijen die in meerdere opdrachten voorkomen; per vak het laatst gekozen niveau. Laagste niveau rood, hoogste groen. Klik op een rij voor het raster met alle niveaus en omschrijvingen.") : null; })(),
             LR.perOpdracht.length ? U.sectie("Per opdracht", TT.el("div", { class: "tt-lijst" }, LR.perOpdracht.map((o) => this.rubricOpdrachtRaster(TT, o))), "Klik op een opdracht voor het hele raster.") : null,
             !LR.gedeeld.length && !LR.perOpdracht.length ? U.leeg("Geen rubrics in de gekozen periode.") : null
           ])
@@ -929,7 +929,7 @@ TT.register({
   rubricRijRaster(TT, rij) {
     const U = this.ui(TT);
     const kop = TT.el("div", { class: "tt-rubric-kop" }, [
-      TT.el("div", {}, [TT.el("b", { text: rij.tekst }), TT.el("small", { class: "tt-muted", text: ` · ${rij.aantalVakken} ${rij.aantalVakken === 1 ? "vak" : "vakken"} · ${rij.beoordeeld} van ${rij.voorkomens.length} beoordeeld` })]),
+      TT.el("div", {}, [TT.el("b", { text: this.hoofdletter(rij.tekst) }), TT.el("small", { class: "tt-muted", text: ` · ${rij.aantalVakken} ${rij.aantalVakken === 1 ? "vak" : "vakken"} · ${rij.beoordeeld} van ${rij.voorkomens.length} beoordeeld` })]),
       rij.gemiddeld != null ? U.chip(`gem. ${U.P(rij.gemiddeld)}`, rij.gemiddeld < 0.5 ? "bad" : rij.gemiddeld < 0.7 ? "warn" : "ok") : null
     ]);
     const rasters = rij.groepen.map((g) => {
@@ -940,13 +940,52 @@ TT.register({
           g.criteria.some(Boolean) ? TT.el("tr", { class: "tt-raster-criteria" }, [TT.el("td", { text: "Omschrijving" }), ...g.criteria.slice(0, n).map((c) => TT.el("td", { text: c || "" }))]) : null,
           ...g.voorkomens.map((v) => TT.el("tr", { class: "is-klik", onclick: () => this.ga(TT, { type: "team", id: v.classId }) }, [
             TT.el("td", { class: "tt-raster-label" }, [TT.el("b", { text: this.vakVan(TT, v.klas) }), TT.el("small", { text: `${v.opdracht}${v.due ? " · " + U.D(v.due) : ""}` })]),
-            ...g.niveaus.map((niv, j) => TT.el("td", { class: "tt-raster-cel" + (v.index === j ? " is-gekozen" + (v.pct != null && v.pct < 0.5 ? " is-laag" : "") : "") + (v.index == null ? " is-leeg" : "") }, v.index === j ? TT.el("span", { class: "tt-stip", title: `${niv.naam}${niv.punten != null ? " · " + niv.punten + " punten" : ""}` }) : null))
+            ...g.niveaus.map((niv, j) => TT.el("td", { class: "tt-raster-cel" + (v.index === j ? " is-gekozen is-" + (this.niveauKleur({ ...v, niveaus: g.niveaus }) || "neutraal") : "") + (v.index == null ? " is-leeg" : "") }, v.index === j ? TT.el("span", { class: "tt-stip", title: `${niv.naam}${niv.punten != null ? " · " + niv.punten + " punten" : ""}` }) : null))
           ]))
         ].filter(Boolean))
       ]);
       return TT.el("div", { class: "tt-raster-wrap" }, tabel);
     });
     return TT.el("div", { class: "tt-rubric is-ingebed" }, [kop, ...rasters]);
+  },
+  /* Kleur van een gekozen niveau op positie: laagste rood, hoogste groen, ertussen neutraal; namen als
+   * "onvoldoende" en "goed" wegen mee. */
+  niveauKleur(v) {
+    if (v.index == null) return "";
+    const naam = String(v.niveau || "").toLowerCase(), n = v.niveaus?.length || 0;
+    if (/onvoldoende|insufficient|slecht|niet/.test(naam)) return "bad";
+    if (/uitstekend|excellent|goed|good|expert/.test(naam)) return "ok";
+    if (v.index === 0) return "bad";
+    if (n && v.index === n - 1) return "ok";
+    return "";
+  },
+  hoofdletter(t) { t = String(t || "").trim(); return t.charAt(0).toUpperCase() + t.slice(1); },
+  /* Matrix: rijen = rubric-rijen die in meerdere opdrachten voorkomen, kolommen = vakken, cel = laatst
+   * gekozen niveau (met telletje bij meerdere opdrachten in dat vak). Klik op een rij voor het raster. */
+  rubricMatrix(TT, LR) {
+    const U = this.ui(TT);
+    const rijen = LR.gedeeld.filter((r) => r.beoordeeld > 0 && r.voorkomens.length > 1);
+    if (!rijen.length) return null;
+    const vakken = [...new Set(rijen.flatMap((r) => r.voorkomens.map((v) => v.classId)))].map((id) => ({ id, naam: this.vakVan(TT, rijen.flatMap((r) => r.voorkomens).find((v) => v.classId === id).klas) })).sort((a, b) => a.naam.localeCompare(b.naam, "nl"));
+    const data = rijen.map((r) => {
+      const per = {};
+      for (const vk of vakken) {
+        const vs = r.voorkomens.filter((v) => v.classId === vk.id && v.index != null).sort((a, b) => (b.due || 0) - (a.due || 0));
+        per[vk.id] = vs.length ? { laatste: vs[0], n: vs.length, alle: vs } : null;
+      }
+      return { id: r.sleutel, rij: r, tekst: this.hoofdletter(r.tekst), per, gemiddeld: r.gemiddeld, aantalVakken: r.aantalVakken, ...Object.fromEntries(vakken.map((vk) => ["v:" + vk.id, per[vk.id] ? per[vk.id].laatste.index : null])) };
+    });
+    const cel = (x, vk) => {
+      const c = x.per[vk.id]; if (!c) return { v: null, text: "", cls: "tt-muted" };
+      const kleur = this.niveauKleur(c.laatste);
+      const node = TT.el("span", { class: "tt-niveau is-" + (kleur || "neutraal"), title: c.alle.map((v) => `${v.opdracht}${v.due ? " (" + U.D(v.due) + ")" : ""}: ${v.niveau}`).join("\n") }, [TT.el("span", { class: "tt-stip" }), TT.el("span", { text: c.laatste.niveau || "niveau " + (c.laatste.index + 1) }), c.n > 1 ? TT.el("small", { text: `×${c.n}` }) : null]);
+      return node;
+    };
+    return this.table(TT, "leerling-rubricmatrix", [
+      { k: "tekst", l: "Rubric-rij", cls: "tt-name", f: (x) => [x.tekst, TT.el("span", { class: "tt-sub", text: `${x.rij.voorkomens.length} opdrachten · ${x.aantalVakken} ${x.aantalVakken === 1 ? "vak" : "vakken"}` })] },
+      ...vakken.map((vk) => ({ k: "v:" + vk.id, l: vk.naam, n: 1, f: (x) => cel(x, vk) })),
+      { k: "gemiddeld", l: "Gem.", n: 1, f: (x) => (x.gemiddeld == null ? "" : { v: x.gemiddeld, text: U.P(x.gemiddeld), cls: x.gemiddeld < 0.5 ? "tt-bad" : x.gemiddeld < 0.7 ? "tt-warnc" : "" }) }
+    ], data, (x) => this.rubricRijRaster(TT, x.rij), { k: "aantalVakken", asc: false });
   },
   /* Eén regel per gedeelde rij: titel, gemiddelde en per vak een label met het gekozen niveau; klik opent het raster. */
   rubricRijCompact(TT, rij) {
@@ -971,8 +1010,8 @@ TT.register({
     const tabel = TT.el("table", { class: "tt-raster tt-raster-vol" }, [
       TT.el("thead", {}, TT.el("tr", {}, [TT.el("th", { text: "Rij" }), ...o.niveaus.map((niv) => TT.el("th", {}, [TT.el("b", { text: niv.naam || "niveau" }), niv.punten != null ? TT.el("small", { text: `${niv.punten} pt` }) : null, niv.beschrijving ? TT.el("small", { class: "tt-muted", text: niv.beschrijving }) : null])), TT.el("th", { class: "tt-num", text: "Punten" })])),
       TT.el("tbody", {}, o.rijen.map((r) => TT.el("tr", {}, [
-        TT.el("td", { class: "tt-raster-label" }, [TT.el("b", { text: r.tekst }), r.gewicht != null ? TT.el("small", { text: `weging ${r.gewicht}%` }) : null]),
-        ...o.niveaus.map((niv, j) => TT.el("td", { class: "tt-raster-cel tt-raster-tekst" + (r.index === j ? " is-gekozen" + (r.pct != null && r.pct < 0.5 ? " is-laag" : "") : "") }, [r.index === j ? TT.el("span", { class: "tt-stip" }) : null, TT.el("span", { text: r.criteria[j] || "" })])),
+        TT.el("td", { class: "tt-raster-label" }, [TT.el("b", { text: this.hoofdletter(r.tekst) }), r.gewicht != null ? TT.el("small", { text: `weging ${r.gewicht}%` }) : null]),
+        ...o.niveaus.map((niv, j) => TT.el("td", { class: "tt-raster-cel tt-raster-tekst" + (r.index === j ? " is-gekozen is-" + (this.niveauKleur({ index: r.index, niveau: r.niveau, niveaus: o.niveaus }) || "neutraal") : "") }, [r.index === j ? TT.el("span", { class: "tt-stip" }) : null, TT.el("span", { text: r.criteria[j] || "" })])),
         TT.el("td", { class: "tt-num", text: r.punten != null ? String(r.punten) : r.index == null ? "–" : "" })
       ])))
     ]);

@@ -1,4 +1,4 @@
-# Docent Tools voor Teams (v0.7.1)
+# Docent Tools voor Teams (v0.7.2)
 
 Chrome-extensie voor Microsoft Teams (web) voor docenten: team-overstijgende analyses van opdrachten. Alles draait lokaal in je browser; er wordt niets naar een eigen server gestuurd. Zusje van [Docent Tools voor Magister](https://github.com/mark-jg/magister-docent), met dezelfde opzet.
 
@@ -105,6 +105,7 @@ Het zijpaneel toont onder **Koppeling** wat er aan de hand is:
 
 ## Wijzigingen
 
+- 0.7.2: rubrics per leerling als matrix (rijen × vakken) met per cel het laatst gekozen niveau en een telletje bij meerdere opdrachten; onbeoordeelde rijen weg; kleur op positie van het niveau (laagste rood, hoogste groen, ertussen neutraal); hoofdletters op rijnamen.
 - 0.7.1: leerlingpagina compacter: tabbladen Vakken en Rubrics; gedeelde rubric-rijen staan ingeklapt als één regel met per vak het gekozen niveau, het raster opent bij klikken.
 - 0.7.0: rubrics per leerling als raster: per gedeelde rij alle niveaus (stappen) met omschrijving en per vak of opdracht een stip op het gekozen niveau; per opdracht het volledige raster met alle rijen, de gekozen cellen, punten en totaal.
 - 0.6.3: twee soorten verbergen: alleen in deze lijst (telt overal mee) of overal en niet meetellen; het kruisje opent een keuzemenu en de beheerlijst toont beide soorten apart.
