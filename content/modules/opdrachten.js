@@ -21,11 +21,11 @@ TT.register({
    * Zo hoeft er na een update van de extensie niets opnieuw opgehaald te worden. */
   migreer(d) {
     if (!d || !d.classes) return d;
-    d.schema = 3;
+    d.schema ??= 3;
     if (!("me" in d)) d.me = null;
     d.volledigAt ??= d.at;
     for (const c of d.classes) { c.isArchived ??= false; c.specialization ??= null; c.eigenaar ??= null; c.createdDateTime ??= null; c.opgehaald ??= true; }
-    d.members ??= {}; d.submissions ??= {}; d.namen ??= {}; d.fouten ??= [];
+    d.members ??= {}; d.submissions ??= {}; d.namen ??= {}; d.fouten ??= []; d.categorieen ??= {}; d.rubrics ??= {};
     return d;
   },
   saveFilter() {
@@ -92,7 +92,8 @@ TT.register({
     const inst = TT.settings.opdrachten;
     // Incrementeel: oude inleveringen hergebruiken voor opdrachten waarvan de deadline langer dan 45 dagen
     // voorbij is en de opdracht zelf niet is gewijzigd. Eens per volledigDagen toch alles.
-    const oud = !volledig && this._data?.classes && Date.now() - (this._data.volledigAt || 0) < (inst.volledigDagen ?? 7) * 864e5 ? this._data : null;
+    // Gegevens van vóór schema 4 missen categorieën, rubrics en rubric-niveaus: dan één keer alles.
+    const oud = !volledig && this._data?.classes && (this._data.schema || 0) >= 4 && Date.now() - (this._data.volledigAt || 0) < (inst.volledigDagen ?? 7) * 864e5 ? this._data : null;
     const oudA = new Map((oud?.assignments || []).map((a) => [a.id, a]));
     let hergebruikt = 0;
     voortgang("Zoeken naar de app Opdrachten in Teams…", 0);
@@ -132,14 +133,23 @@ TT.register({
     // 2. Opdrachten per klas, gebundeld.
     voortgang(`Opdrachten ophalen (${doen.length} teams)…`, 0.12);
     const assignments = [];
-    const asg = await TT.graphMany(doen.map((c) => ({ key: c.id, url: `/education/classes/${c.id}/assignments` })), { onProgress: (n, t) => voortgang(`Opdrachten van ${n}/${t} teams…`, 0.12 + 0.1 * (n / t)) });
+    // Met de cijfercategorie erbij ($expand); lukt dat voor een klas niet, dan zonder.
+    const asg = await TT.graphMany(doen.map((c) => ({ key: c.id, url: `/education/classes/${c.id}/assignments?$expand=gradingCategory` })), { onProgress: (n, t) => voortgang(`Opdrachten van ${n}/${t} teams…`, 0.12 + 0.08 * (n / t)) });
+    const zonder = doen.filter((c) => asg.get(c.id)?.status === 400);
+    if (zonder.length) for (const [k, v] of await TT.graphMany(zonder.map((c) => ({ key: c.id, url: `/education/classes/${c.id}/assignments` })))) asg.set(k, v);
     for (const c of doen) {
       const a = asg.get(c.id);
       if (a?.status === 200) {
         c.klas = true;
-        for (const x of a.value) assignments.push({ id: x.id, classId: c.id, displayName: x.displayName, status: x.status, dueDateTime: x.dueDateTime, assignedDateTime: x.assignedDateTime, closeDateTime: x.closeDateTime, createdDateTime: x.createdDateTime, lastModifiedDateTime: x.lastModifiedDateTime, allowLateSubmissions: x.allowLateSubmissions, grading: x.grading ? { "@odata.type": x.grading["@odata.type"], maxPoints: x.grading.maxPoints } : null, webUrl: x.webUrl });
+        for (const x of a.value) assignments.push({ id: x.id, classId: c.id, displayName: x.displayName, status: x.status, dueDateTime: x.dueDateTime, assignedDateTime: x.assignedDateTime, closeDateTime: x.closeDateTime, createdDateTime: x.createdDateTime, lastModifiedDateTime: x.lastModifiedDateTime, allowLateSubmissions: x.allowLateSubmissions, grading: x.grading ? { "@odata.type": x.grading["@odata.type"], maxPoints: x.grading.maxPoints } : null, webUrl: x.webUrl,
+          categorie: x.gradingCategory ? { id: x.gradingCategory.id, naam: x.gradingCategory.displayName, gewicht: x.gradingCategory.percentageWeight ?? null } : null });
       } else { c.klas = bron === "education"; c.fout = `opdrachten: HTTP ${a?.status}${a?.code ? " " + a.code : ""}`; }
     }
+    // Cijfercategorieën met weging per klas (instellingen van de klas).
+    voortgang("Cijfercategorieën ophalen…", 0.21);
+    const categorieen = {};
+    const cat = await TT.graphMany(doen.filter((c) => c.klas).map((c) => ({ key: c.id, url: `/education/classes/${c.id}/assignmentSettings?$expand=gradingCategories` })));
+    for (const c of doen) { const r = cat.get(c.id); categorieen[c.id] = r?.status === 200 ? (r.json?.gradingCategories || []).map((g) => ({ id: g.id, naam: g.displayName, gewicht: g.percentageWeight ?? null })) : (oud?.categorieen?.[c.id] || []); }
     // Bij de teams-lijst vallen teams zonder werkende opdrachten-API (geen klasteam) weg.
     const eerder = classes.length;
     classes = classes.filter((c) => !c.opgehaald || c.klas);
@@ -185,7 +195,27 @@ TT.register({
       const r = subs.get(a.id);
       if (r?.status !== 200) { a.fout = `inleveringen: HTTP ${r?.status}`; submissions[a.id] = oud?.submissions?.[a.id] || []; continue; }
       submissions[a.id] = r.value.map((x) => ({ id: x.id, status: x.status, submittedDateTime: x.submittedDateTime, returnedDateTime: x.returnedDateTime, reassignedDateTime: x.reassignedDateTime, excusedDateTime: x.excusedDateTime, recipient: { userId: x.recipient?.userId || x.recipient?.id || null },
-        outcomes: (x.outcomes || []).filter((o) => /pointsOutcome/i.test(o["@odata.type"] || "")).map((o) => ({ "@odata.type": o["@odata.type"], points: o.points ? { points: o.points.points } : null, publishedPoints: o.publishedPoints ? { points: o.publishedPoints.points } : null })) }));
+        outcomes: (x.outcomes || []).filter((o) => /pointsOutcome|rubricOutcome/i.test(o["@odata.type"] || "")).map((o) => /rubricOutcome/i.test(o["@odata.type"]) 
+          ? { "@odata.type": o["@odata.type"], niveaus: (o.publishedRubricQualitySelectedLevels?.length ? o.publishedRubricQualitySelectedLevels : o.rubricQualitySelectedLevels || []).map((l) => ({ qualityId: l.qualityId, columnId: l.columnId })) }
+          : { "@odata.type": o["@odata.type"], points: o.points ? { points: o.points.points } : null, publishedPoints: o.publishedPoints ? { points: o.publishedPoints.points } : null }) }));
+    }
+
+    // 4b. Rubrics per opdracht: rijen (qualities), niveaus en punten. 404 = geen rubric.
+    const rubrics = {};
+    const rubricNodig = [];
+    for (const a of actief) { if (herbruikbaar(a) && a.id in (oud?.rubrics || {})) rubrics[a.id] = oud.rubrics[a.id]; else rubricNodig.push(a); }
+    if (rubricNodig.length) {
+      voortgang(`Rubrics ophalen (${rubricNodig.length} opdrachten)…`, 0.9);
+      const rb = await TT.graphMany(rubricNodig.map((a) => ({ key: a.id, url: `/education/classes/${a.classId}/assignments/${a.id}/rubric` })), { onProgress: (n, t) => voortgang(`Rubrics van ${n}/${t} opdrachten…`, 0.9 + 0.05 * (n / t)) });
+      const tekst = (b) => (b && typeof b === "object" ? String(b.content || "") : String(b || "")).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      for (const a of rubricNodig) {
+        const r = rb.get(a.id);
+        if (r?.status !== 200 || !r.json) { rubrics[a.id] = r?.status === 404 ? null : (oud?.rubrics?.[a.id] ?? null); continue; }
+        const j = r.json;
+        rubrics[a.id] = { id: j.id, naam: j.displayName || "", beschrijving: tekst(j.description),
+          niveaus: (j.levels || []).map((l) => ({ id: l.levelId, naam: l.displayName || "", beschrijving: tekst(l.description), punten: typeof l.grading?.maxPoints === "number" ? l.grading.maxPoints : null })),
+          rijen: (j.qualities || []).map((q) => ({ id: q.qualityId, tekst: tekst(q.description), gewicht: typeof q.weight === "number" ? q.weight : null, criteria: (q.criteria || []).map((c) => ({ id: c.criterionId, tekst: tekst(c.description) })) })) };
+      }
     }
 
     // 5. Namen van leerlingen die niet (meer) lid zijn.
@@ -199,9 +229,9 @@ TT.register({
       for (const [id, r] of res) if (r.status === 200 && r.json?.displayName) namen[id] = r.json.displayName;
     }
     const fouten = [...classes.filter((c) => c.fout).map((c) => `${c.displayName}: ${c.fout}`), ...actief.filter((a) => a.fout).map((a) => `${a.displayName}: ${a.fout}`)];
-    const data = { schema: 3, at: Date.now(), volledigAt: oud ? oud.volledigAt || oud.at : Date.now(), hergebruikt, bron, rosterOk, me, weggelaten, totaalTeams, nietKlas: eerder - classes.length,
+    const data = { schema: 4, at: Date.now(), volledigAt: oud ? oud.volledigAt || oud.at : Date.now(), hergebruikt, bron, rosterOk, me, weggelaten, totaalTeams, nietKlas: eerder - classes.length,
       classes: classes.map(({ id, displayName, classCode, externalName, isArchived, specialization, eigenaar, createdDateTime, opgehaald }) => ({ id, displayName, classCode, externalName, isArchived: !!isArchived, specialization: specialization || null, eigenaar: eigenaar ?? null, createdDateTime: createdDateTime || null, opgehaald: !!opgehaald })),
-      members, assignments, submissions, namen, fouten };
+      members, assignments, submissions, categorieen, rubrics, namen, fouten };
     this._data = data;
     voortgang("Opslaan…", 0.98);
     try { await chrome.storage.local.set({ ttData: data }); }
@@ -228,6 +258,16 @@ TT.register({
     const sleutel = JSON.stringify([this._data?.at, this._filter.periode, sel ? [...sel].sort() : null, K.sleutel, o.drempelOntbreekt, o.drempelTeLaat]);
     if (this._analyseCache?.sleutel !== sleutel) this._analyseCache = { sleutel, r: TT_ANALYSE.bouw(this._data, { periode: this._filter.periode, klassen: sel, klasVan: K.klasVan, drempelOntbreekt: o.drempelOntbreekt, drempelTeLaat: o.drempelTeLaat }) };
     return this._analyseCache.r;
+  },
+  cijfers(TT) {
+    const r = this.analyse(TT); // zorgt voor dezelfde sleutel
+    if (this._cijfersCache?.r !== r) this._cijfersCache = { r, c: TT_ANALYSE.cijfers(this._data, { periode: this._filter.periode, klassen: this.selectie(), klasVan: this.klassen(TT).klasVan }) };
+    return this._cijfersCache.c;
+  },
+  rubrics(TT) {
+    const r = this.analyse(TT);
+    if (this._rubricsCache?.r !== r) this._rubricsCache = { r, u: TT_ANALYSE.rubrics(this._data, { periode: this._filter.periode, klassen: this.selectie() }) };
+    return this._rubricsCache.u;
   },
   /* Per afgeleide klas de totalen van haar leerlingen. */
   klasOverzicht(TT, r) {
@@ -315,7 +355,7 @@ TT.register({
     this._limiet = null;
     const r = this.analyse(TT);
     const K = this.klassen(TT);
-    const views = [["groepen", "Klassen", K.klassen.filter((k) => k.leerlingen.length).length], ["klassen", "Teams", r.klassen.length], ["leerlingen", "Leerlingen", r.leerlingen.length], ["opdrachten", "Opdrachten", r.opdrachten.length], ["deadlines", "Deadlines", r.deadlines.length], ["nakijken", "Nakijken", r.nakijken.length], ["signalen", "Signalen", r.signalen.length]];
+    const views = [["groepen", "Klassen", K.klassen.filter((k) => k.leerlingen.length).length], ["klassen", "Teams", r.klassen.length], ["leerlingen", "Leerlingen", r.leerlingen.length], ["opdrachten", "Opdrachten", r.opdrachten.length], ["deadlines", "Deadlines", r.deadlines.length], ["nakijken", "Nakijken", r.nakijken.length], ["signalen", "Signalen", r.signalen.length], ["cijfers", "Cijfers", this.cijfers(TT).leerlingen.length], ["rubrics", "Rubrics", this.rubrics(TT).rijen.filter((x) => x.gedeeld).length]];
     const tabs = TT.el("div", { class: "tt-tabs", role: "tablist" }, views.map(([id, l, n]) => TT.el("button", { class: "tt-tab" + (this._view === id ? " is-on" : ""), role: "tab", "aria-selected": String(this._view === id), "data-view": id, onclick: () => TT.guard(() => {
       this._view = id; this._limiet = null;
       for (const b of tabs.querySelectorAll(".tt-tab")) { const on = b.dataset.view === id; b.classList.toggle("is-on", on); b.setAttribute("aria-selected", String(on)); }
@@ -430,6 +470,26 @@ TT.register({
           { k: "teLaat", l: "Te laat", n: 1, f: (x) => num(x.teLaat, "tt-warnc") }, { k: "ontbreekt", l: "Ontbreekt", n: 1, f: (x) => num(x.ontbreekt, "tt-bad") },
           { k: "nakijken", l: "Na te kijken", n: 1, f: (x) => num(x.nakijken, "tt-warnc") }, { k: "metSignaal", l: "Met signaal", n: 1, f: (x) => num(x.metSignaal, "tt-bad") }, { k: "gemiddeld", l: "Gemiddeld", n: 1, f: (x) => P(x.gemiddeld) }
         ], rows, (x) => this.klasDetail(TT, x), { k: "naam", asc: true })];
+    } else if (this._view === "cijfers") {
+      const C = this.cijfers(TT);
+      const rows = C.leerlingen.filter((x) => inKlas(x) && (hit(x.naam) || hit(x.klas)) && (!P_ || (x.totaal != null && x.totaal < 0.55)));
+      const teams = C.teams.filter((t) => (!KL || K.teamKlas[t.id] === KL) && rows.some((x) => x.teams[t.id]));
+      const cel = (v, n) => v == null ? "" : { v, text: P(v), cls: v < 0.55 ? "tt-bad" : v < 0.7 ? "tt-warnc" : "" };
+      out = [TT.el("p", { class: "tt-muted", text: `Per leerling het gemiddelde per team als percentage van de maximale punten, gewogen volgens de cijfercategorieën van dat team (zonder wegingen: gewoon gemiddelde). Totaal is het gemiddelde over de teams. Klik op een rij voor categorieën en opdrachten. "Alleen problemen" toont wie onder 55% staat.` }),
+        this.table(TT, "cijfers", [
+          { k: "naam", l: "Leerling", cls: "tt-name", f: (x) => [x.naam, x.klas ? TT.el("span", { class: "tt-sub", text: x.klas }) : null] },
+          { k: "totaal", l: "Totaal", n: 1, f: (x) => cel(x.totaal) }, { k: "n", l: "Cijfers", n: 1 },
+          ...teams.map((t) => ({ k: "t:" + t.id, l: t.naam.replace(/^[A-Za-z]{1,8}\d{2,4}[A-Za-z]{0,2}\s*[-–:]\s*/, ""), n: 1, f: (x) => cel(x.teams[t.id]?.eind) }))
+        ], rows.map((x) => { const y = { ...x }; for (const t of teams) y["t:" + t.id] = x.teams[t.id]?.eind ?? null; return y; }), (x) => this.cijferDetail(TT, x), { k: "totaal", asc: true })];
+    } else if (this._view === "rubrics") {
+      const U = this.rubrics(TT);
+      const rows = U.rijen.filter((x) => (!P_ || x.gedeeld) && (hit(x.tekst) || x.teams.some(hit) || x.rubrics.some(hit)) && (!KL || x.voorkomens.some((v) => K.teamKlas[v.classId] === KL)));
+      out = [TT.el("p", { class: "tt-muted", text: `Rubric-rijen die in meerdere opdrachten of teams voorkomen (herkend op tekst, zonder leestekens en hoofdletters). Klik op een rij om per leerling het gekozen niveau over alle voorkomens te zien. "Alleen problemen" beperkt tot gedeelde rijen. Rubrics: ${U.rubrics.length}, waarvan ${U.rubrics.filter((r) => r.aantalTeams > 1).length} in meerdere teams.` }),
+        this.table(TT, "rubrics", [
+          { k: "tekst", l: "Rubric-rij", cls: "tt-name", f: (x) => [x.tekst, TT.el("span", { class: "tt-sub", text: x.rubrics.join(" · ") })] },
+          { k: "n", l: "Opdrachten", n: 1 }, { k: "aantalTeams", l: "Teams", n: 1, f: (x) => ({ v: x.aantalTeams, text: String(x.aantalTeams), cls: x.aantalTeams > 1 ? "tt-good" : "" }) },
+          { k: "teams", l: "In teams", f: (x) => x.teams.join(", ") }
+        ], rows, (x) => this.rubricDetail(TT, x), { k: "aantalTeams", asc: false })];
     } else if (this._view === "klassen") {
       out = [cards([["Teams", r.totaal.klassen], ["Opdrachten", r.totaal.opdrachten], ["Leerlingen", r.totaal.leerlingen], ["Ingeleverd", P(r.totaal.pctIngeleverd), `${r.totaal.ingeleverd} van ${r.totaal.toegewezen}`], ["Te laat", P(r.totaal.pctTeLaat), "van wat is ingeleverd"], ["Ontbreekt", r.totaal.ontbreekt], ["Na te kijken", r.totaal.nakijken], ["Gemiddeld", P(r.totaal.gemiddeld), "van de max. punten"]]),
         this.table(TT, "klassen", [
@@ -482,6 +542,29 @@ TT.register({
     this._body.replaceChildren(...out);
   },
 
+  cijferDetail(TT, l) {
+    const P = TT.pct, D = TT.fmtDate;
+    const teams = Object.entries(l.teams).sort((a, b) => a[1].klas.localeCompare(b[1].klas, "nl"));
+    return TT.el("div", { class: "tt-detail-grid" }, teams.map(([id, t]) => TT.el("div", {}, [
+      TT.el("h4", { style: "margin:0 0 6px;font-size:12px", text: `${t.klas}: ${P(t.eind)}${t.gewogen != null ? " gewogen" : ""} (${t.n} cijfers)` }),
+      TT.el("table", { class: "tt-mini" }, [TT.el("tr", {}, ["Categorie", "Weging", "Cijfers", "Gemiddeld"].map((h) => TT.el("th", { text: h }))),
+        ...t.categorieen.map((c) => TT.el("tr", {}, [c.naam, c.gewicht != null ? c.gewicht + "%" : "", c.n, P(c.gemiddeld)].map((v) => TT.el("td", { text: String(v ?? "") }))))]),
+      TT.el("table", { class: "tt-mini", style: "margin-top:6px" }, [TT.el("tr", {}, ["Opdracht", "Deadline", "Categorie", "Punten", "%"].map((h) => TT.el("th", { text: h }))),
+        ...t.opdrachten.map((o) => TT.el("tr", {}, [o.opdracht, D(o.due), o.catNaam, `${o.punten ?? ""}${o.max ? " / " + o.max : ""}`, P(o.pct)].map((v, i) => TT.el("td", { class: i === 4 && o.pct < 0.55 ? "tt-bad" : "", text: String(v ?? "") }))))])
+    ])));
+  },
+  rubricDetail(TT, rij) {
+    const P = TT.pct, D = TT.fmtDate;
+    const N = TT_ANALYSE.rijNiveaus(this._data, rij, { klasVan: this.klassen(TT).klasVan });
+    const KL = this._filter.klas;
+    const rows = N.filter((x) => !KL || x.klas === KL);
+    return TT.el("div", {}, [
+      TT.el("h4", { style: "margin:0 0 6px;font-size:12px", text: `Voorkomens: ${rij.voorkomens.map((v) => `${v.klas} › ${v.opdracht}`).join(" · ")}` }),
+      rows.length ? TT.el("table", { class: "tt-mini" }, [TT.el("tr", {}, ["Leerling", "Klas", "Gemiddeld", "Beoordelingen (team › opdracht: niveau)"].map((h) => TT.el("th", { text: h }))),
+        ...rows.map((x) => TT.el("tr", {}, [TT.el("td", { text: x.naam }), TT.el("td", { text: x.klas }), TT.el("td", { class: x.gemiddeld != null && x.gemiddeld < 0.5 ? "tt-bad" : "", text: P(x.gemiddeld) }), TT.el("td", { style: "white-space:normal", text: x.beoordelingen.map((b) => `${b.klas} › ${b.opdracht} (${D(b.due)}): ${b.niveau}${b.punten != null ? ` (${b.punten}${b.max ? "/" + b.max : ""})` : ""}`).join(" · ") })]))])
+        : TT.el("p", { class: "tt-muted", text: "Nog geen beoordelingen op deze rij." })
+    ]);
+  },
   klasDetail(TT, k) {
     const P = TT.pct, D = TT.fmtDate;
     return TT.el("div", {}, [TT.el("h4", { style: "margin:0 0 6px;font-size:12px", text: `Klaslijst ${k.naam} (${k.lijst.length})` }), TT.el("table", { class: "tt-mini" }, [
@@ -545,13 +628,28 @@ TT.register({
     return [["Klassen", [["Klas", "Teams", "Leerlingen", "Toegewezen", "Ingeleverd", "% ingeleverd", "Te laat", "Ontbreekt", "Open", "Na te kijken", "Met signaal", "Gemiddeld"], ...ko.map((k) => [k.naam, k.teams.join(", "), k.leerlingen, k.toegewezen, k.ingeleverd, p(k.pctIngeleverd), k.teLaat, k.ontbreekt, k.open, k.nakijken, k.metSignaal, p(k.gemiddeld)])]],
       ["Klasindeling", [["Klas", "Leerling", "Teams in klas", "Toegewezen", "Ingeleverd", "Te laat", "Ontbreekt", "Gemiddeld", "Laatste inlevering"], ...ko.flatMap((k) => k.lijst.map((l) => [k.naam, l.naam, l.teams, l.toegewezen ?? 0, l.ingeleverd ?? 0, l.teLaat ?? 0, l.ontbreekt ?? 0, p(l.gemiddeld), f(l.laatste)]))]]];
   },
+  cijferTabellen(TT) {
+    const C = this.cijfers(TT), p = (x) => (x == null ? "" : Math.round(x * 100) + "%");
+    const M = [["Leerling", "Klas", "Totaal", "Cijfers", ...C.teams.map((t) => t.naam)], ...C.leerlingen.map((l) => [l.naam, l.klas, p(l.totaal), l.n, ...C.teams.map((t) => p(l.teams[t.id]?.eind))])];
+    const K = [["Leerling", "Klas", "Team", "Categorie", "Weging", "Cijfers", "Gemiddeld", "Gewogen team", "Gewoon team"], ...C.leerlingen.flatMap((l) => Object.values(l.teams).flatMap((t) => t.categorieen.map((c) => [l.naam, l.klas, t.klas, c.naam, c.gewicht ?? "", c.n, p(c.gemiddeld), p(t.gewogen), p(t.gemiddeld)])))];
+    return [["Cijfers", M], ["Cijfers per categorie", K]];
+  },
+  rubricTabellen(TT) {
+    const U = this.rubrics(TT), p = (x) => (x == null ? "" : Math.round(x * 100) + "%");
+    const R = [["Rubric-rij", "Opdrachten", "Teams", "In teams", "Rubrics"], ...U.rijen.map((r) => [r.tekst, r.n, r.aantalTeams, r.teams.join(", "), r.rubrics.join(", ")])];
+    const kv = this.klassen(TT).klasVan;
+    const L = [["Rubric-rij", "Leerling", "Klas", "Gemiddeld", "Team", "Opdracht", "Niveau", "Punten"], ...U.rijen.filter((r) => r.gedeeld).flatMap((r) => TT_ANALYSE.rijNiveaus(this._data, r, { klasVan: kv }).flatMap((x) => x.beoordelingen.map((b) => [r.tekst, x.naam, x.klas, p(x.gemiddeld), b.klas, b.opdracht, b.niveau, b.punten ?? ""])))];
+    return [["Rubric-rijen", R], ["Rubric-niveaus per leerling", L]];
+  },
   exportAlles(TT) {
     const r = this.analyse(TT);
-    TT.toXlsx([...this.klasTabellen(TT, r), ...TT_ANALYSE.naarTabellen(r)], "teams-opdrachten");
+    TT.toXlsx([...this.klasTabellen(TT, r), ...TT_ANALYSE.naarTabellen(r), ...this.cijferTabellen(TT), ...this.rubricTabellen(TT)], "teams-opdrachten");
   },
   exportTab(TT) {
     const r = this.analyse(TT);
     if (this._view === "groepen") return TT.toXlsx(this.klasTabellen(TT, r), "teams-klassen");
+    if (this._view === "cijfers") return TT.toXlsx(this.cijferTabellen(TT), "teams-cijfers");
+    if (this._view === "rubrics") return TT.toXlsx(this.rubricTabellen(TT), "teams-rubrics");
     const tabs = TT_ANALYSE.naarTabellen(r);
     const map = { klassen: "Teams", leerlingen: "Leerlingen", opdrachten: "Opdrachten", signalen: "Signalen" };
     const f = (t) => (t ? new Date(t).toISOString().slice(0, 10) : "");

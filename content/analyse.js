@@ -65,6 +65,112 @@
     return { ...acc, gemiddeld: acc.pctN ? acc.pctSom / acc.pctN : null, pctIngeleverd: n ? acc.ingeleverd / n : null, pctTeLaat: acc.ingeleverd ? acc.teLaat / acc.ingeleverd : null, pctOntbreekt: n ? acc.ontbreekt / n : null };
   }
 
+  /* Actieve opdrachten binnen periode en klassenkeuze (gedeeld door bouw, cijfers en rubrics). */
+  function actieveOpdrachten(data, opties = {}) {
+    const nu = opties.nu || Date.now();
+    const [van, tot] = periodeBereik(opties.periode || "schooljaar", nu);
+    const actief = (a) => ["published", "assigned", "inactive"].includes(a.status || "assigned");
+    const inPeriode = (a) => { const t = ts(a.dueDateTime) ?? ts(a.assignedDateTime) ?? ts(a.createdDateTime); return t == null || (t >= van && t <= tot); };
+    const inKlassen = (a) => !opties.klassen || opties.klassen.has(a.classId);
+    return (data.assignments || []).filter((a) => actief(a) && inPeriode(a) && inKlassen(a) && (ts(a.assignedDateTime) == null || ts(a.assignedDateTime) <= nu || a.status !== "scheduled"));
+  }
+  const gem = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+
+  /* ---------- Cijfers per leerling per team, met gewogen categorieën ----------
+   * Per team: gemiddelde per cijfercategorie (percentage van de max. punten) en het gewogen gemiddelde
+   * volgens de wegingen van de klas (data.categorieen[classId]), genormaliseerd over categorieën waarin
+   * de leerling cijfers heeft. Zonder wegingen is gewogen = gewoon gemiddelde. */
+  function cijfers(data, opties = {}) {
+    const nu = opties.nu || Date.now();
+    const klassen = new Map((data.classes || []).map((c) => [c.id, c]));
+    const memberNaam = new Map(Object.values(data.members || {}).flat().map((m) => [m.id, m.displayName]));
+    const naam = (uid) => data.namen?.[uid] || memberNaam.get(uid) || uid;
+    const per = new Map(); // uid -> Map(classId -> [{ aid, opdracht, catId, pct, punten, max, due }])
+    const teamsMet = new Set();
+    for (const a of actieveOpdrachten(data, opties)) {
+      for (const sub of data.submissions?.[a.id] || []) {
+        const b = beoordeel(sub, a, nu);
+        if (b.pct == null) continue;
+        const uid = sub.recipient?.userId || "?";
+        if (!per.has(uid)) per.set(uid, new Map());
+        const m = per.get(uid); if (!m.has(a.classId)) m.set(a.classId, []);
+        m.get(a.classId).push({ aid: a.id, opdracht: a.displayName, catId: a.categorie?.id || null, catNaam: a.categorie?.naam || "", pct: b.pct, punten: b.punten, max: b.max, due: b.due });
+        teamsMet.add(a.classId);
+      }
+    }
+    const teams = [...teamsMet].map((id) => ({ id, naam: klassen.get(id)?.displayName || id })).sort((a, b) => a.naam.localeCompare(b.naam, "nl"));
+    const leerlingen = [...per.entries()].map(([uid, m]) => {
+      const perTeam = {};
+      for (const [classId, items] of m) {
+        const cats = data.categorieen?.[classId] || [];
+        const perCat = new Map();
+        for (const it of items) { const k = it.catId || ""; if (!perCat.has(k)) perCat.set(k, []); perCat.get(k).push(it.pct); }
+        const categorieen = [...perCat.entries()].map(([id, ps]) => { const c = cats.find((x) => x.id === id); return { id, naam: c?.naam || items.find((x) => x.catId === id)?.catNaam || (id ? "Onbekend" : "Zonder categorie"), gewicht: c?.gewicht ?? null, n: ps.length, gemiddeld: gem(ps) }; }).sort((a, b) => (b.gewicht || 0) - (a.gewicht || 0) || a.naam.localeCompare(b.naam, "nl"));
+        const gewogenCats = categorieen.filter((c) => c.gewicht > 0);
+        const somG = gewogenCats.reduce((a, c) => a + c.gewicht, 0);
+        const gewogen = somG > 0 ? gewogenCats.reduce((a, c) => a + c.gemiddeld * c.gewicht, 0) / somG : null;
+        const gemiddeld = gem(items.map((x) => x.pct));
+        perTeam[classId] = { klas: klassen.get(classId)?.displayName || classId, n: items.length, gemiddeld, gewogen, eind: gewogen ?? gemiddeld, categorieen, opdrachten: items.sort((a, b) => (b.due || 0) - (a.due || 0)) };
+      }
+      const eind = Object.values(perTeam).map((t) => t.eind);
+      return { id: uid, naam: naam(uid), klas: opties.klasVan?.[uid] || "", teams: perTeam, aantalTeams: eind.length, totaal: gem(eind), n: Object.values(perTeam).reduce((a, t) => a + t.n, 0) };
+    }).sort((a, b) => a.naam.localeCompare(b.naam, "nl"));
+    return { teams, leerlingen };
+  }
+
+  /* ---------- Rubrics: gelijke rijen over teams en opdrachten heen ----------
+   * Een rij (quality) wordt herkend aan de genormaliseerde tekst. Rijen die in meer dan één opdracht of
+   * team voorkomen zijn "gedeeld". Niveaus en punten per voorkomen blijven beschikbaar voor rijNiveaus. */
+  const normTekst = (t) => String(t || "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  function rubrics(data, opties = {}) {
+    const klassen = new Map((data.classes || []).map((c) => [c.id, c]));
+    const rijen = new Map(), perRubric = new Map();
+    for (const a of actieveOpdrachten(data, opties)) {
+      const rb = data.rubrics?.[a.id]; if (!rb) continue;
+      const klasNaam = klassen.get(a.classId)?.displayName || a.classId;
+      const rk = normTekst(rb.naam) || "(zonder naam)";
+      if (!perRubric.has(rk)) perRubric.set(rk, { naam: rb.naam || "(zonder naam)", opdrachten: 0, teams: new Set(), rijen: rb.rijen.length });
+      const pr = perRubric.get(rk); pr.opdrachten++; pr.teams.add(klasNaam);
+      for (const q of rb.rijen) {
+        const key = normTekst(q.tekst); if (!key) continue;
+        if (!rijen.has(key)) rijen.set(key, { sleutel: key, tekst: q.tekst, voorkomens: [] });
+        rijen.get(key).voorkomens.push({ aid: a.id, classId: a.classId, klas: klasNaam, opdracht: a.displayName, rubric: rb.naam || "", qualityId: q.id, gewicht: q.gewicht, niveaus: rb.niveaus, due: ts(a.dueDateTime) });
+      }
+    }
+    const uit = [...rijen.values()].map((r) => {
+      const teams = [...new Set(r.voorkomens.map((v) => v.klas))].sort((a, b) => a.localeCompare(b, "nl"));
+      const rbs = [...new Set(r.voorkomens.map((v) => v.rubric).filter(Boolean))].sort();
+      return { ...r, n: r.voorkomens.length, teams, aantalTeams: teams.length, rubrics: rbs, gedeeld: r.voorkomens.length > 1 };
+    }).sort((a, b) => b.aantalTeams - a.aantalTeams || b.n - a.n || a.tekst.localeCompare(b.tekst, "nl"));
+    const rubricsLijst = [...perRubric.values()].map((r) => ({ ...r, teams: [...r.teams].sort(), aantalTeams: r.teams.size })).sort((a, b) => b.opdrachten - a.opdrachten || a.naam.localeCompare(b.naam, "nl"));
+    return { rijen: uit, rubrics: rubricsLijst };
+  }
+  /* Per leerling het gekozen niveau voor één rubric-rij, over alle voorkomens. pct = punten van het niveau
+   * gedeeld door de hoogste punten van de rubric; zonder punten telt de positie van het niveau. */
+  function rijNiveaus(data, rij, opties = {}) {
+    const memberNaam = new Map(Object.values(data.members || {}).flat().map((m) => [m.id, m.displayName]));
+    const naam = (uid) => data.namen?.[uid] || memberNaam.get(uid) || uid;
+    const per = new Map();
+    for (const v of rij.voorkomens) {
+      const nivs = v.niveaus || [];
+      const maxP = Math.max(...nivs.map((n) => n.punten ?? -Infinity));
+      const metPunten = isFinite(maxP) && maxP > 0;
+      for (const sub of data.submissions?.[v.aid] || []) {
+        const uid = sub.recipient?.userId || "?";
+        for (const o of sub.outcomes || []) {
+          if (!/rubricOutcome/i.test(o["@odata.type"] || "")) continue;
+          const sel = (o.niveaus || []).find((x) => x.qualityId === v.qualityId); if (!sel) continue;
+          const idx = nivs.findIndex((n) => n.id === sel.columnId); if (idx < 0) continue;
+          const niv = nivs[idx];
+          const pct = metPunten ? (niv.punten ?? 0) / maxP : nivs.length > 1 ? idx / (nivs.length - 1) : null;
+          if (!per.has(uid)) per.set(uid, []);
+          per.get(uid).push({ aid: v.aid, opdracht: v.opdracht, klas: v.klas, niveau: niv.naam || `niveau ${idx + 1}`, index: idx, punten: niv.punten, max: metPunten ? maxP : null, pct, due: v.due });
+        }
+      }
+    }
+    return [...per.entries()].map(([uid, bs]) => ({ id: uid, naam: naam(uid), klas: opties.klasVan?.[uid] || "", beoordelingen: bs.sort((a, b) => (b.due || 0) - (a.due || 0)), n: bs.length, gemiddeld: gem(bs.map((b) => b.pct).filter((x) => x != null)) })).sort((a, b) => a.naam.localeCompare(b.naam, "nl"));
+  }
+
   /**
    * Bouwt alle overzichten. opties: { periode, klassen (Set van classId of null), nu, drempelOntbreekt, drempelTeLaat }
    */
@@ -220,7 +326,7 @@
     return { klassen: uit, klasVan, teamKlas };
   }
 
-  const API = { bouw, beoordeel, periodeBereik, naarTabellen, klassen };
+  const API = { bouw, beoordeel, periodeBereik, naarTabellen, klassen, cijfers, rubrics, rijNiveaus, actieveOpdrachten };
   globalThis.TT_ANALYSE = API;
   if (typeof module !== "undefined" && module.exports) module.exports = API;
 })();

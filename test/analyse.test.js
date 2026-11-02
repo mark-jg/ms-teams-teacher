@@ -150,4 +150,54 @@ assert.equal(M.teamKlas.a, "MIP26A");
 assert.equal(M.teamKlas.g, "KD25");
 assert.equal(M.klasVan.p, "MIP26A");
 
+// Cijfers met gewogen categorieën: toetsen 70%, huiswerk 30%.
+const cd = {
+  classes: [{ id: "k1", displayName: "MIP26A - Engels" }, { id: "k2", displayName: "MIP26A - Rekenen" }],
+  members: { k1: [{ id: "u1", displayName: "Aisha" }], k2: [{ id: "u1", displayName: "Aisha" }] },
+  categorieen: { k1: [{ id: "c1", naam: "Toetsen", gewicht: 70 }, { id: "c2", naam: "Huiswerk", gewicht: 30 }], k2: [] },
+  assignments: [
+    { id: "a1", classId: "k1", displayName: "Toets 1", status: "assigned", dueDateTime: d("2026-10-01T00:00:00Z"), grading: { maxPoints: 10 }, categorie: { id: "c1", naam: "Toetsen", gewicht: 70 } },
+    { id: "a2", classId: "k1", displayName: "Huiswerk 1", status: "assigned", dueDateTime: d("2026-10-02T00:00:00Z"), grading: { maxPoints: 10 }, categorie: { id: "c2", naam: "Huiswerk", gewicht: 30 } },
+    { id: "a3", classId: "k1", displayName: "Los", status: "assigned", dueDateTime: d("2026-10-03T00:00:00Z"), grading: { maxPoints: 10 }, categorie: null },
+    { id: "a4", classId: "k2", displayName: "Rekentoets", status: "assigned", dueDateTime: d("2026-10-04T00:00:00Z"), grading: { maxPoints: 20 }, categorie: null }
+  ],
+  submissions: {
+    a1: [{ id: "s1", status: "returned", submittedDateTime: d("2026-09-30T00:00:00Z"), recipient: { userId: "u1" }, outcomes: [{ "@odata.type": "#microsoft.graph.educationPointsOutcome", points: { points: 6 } }] }],
+    a2: [{ id: "s2", status: "returned", submittedDateTime: d("2026-10-01T00:00:00Z"), recipient: { userId: "u1" }, outcomes: [{ "@odata.type": "#microsoft.graph.educationPointsOutcome", points: { points: 10 } }] }],
+    a3: [{ id: "s3", status: "returned", submittedDateTime: d("2026-10-02T00:00:00Z"), recipient: { userId: "u1" }, outcomes: [{ "@odata.type": "#microsoft.graph.educationPointsOutcome", points: { points: 2 } }] }],
+    a4: [{ id: "s4", status: "returned", submittedDateTime: d("2026-10-03T00:00:00Z"), recipient: { userId: "u1" }, outcomes: [{ "@odata.type": "#microsoft.graph.educationPointsOutcome", points: { points: 15 } }] }]
+  }, namen: {}
+};
+const C = A.cijfers(cd, { periode: "schooljaar", nu });
+const ai = C.leerlingen[0];
+assert.equal(C.teams.length, 2);
+assert.equal(ai.teams.k1.n, 3);
+assert.ok(Math.abs(ai.teams.k1.gemiddeld - 0.6) < 1e-9);       // (0.6 + 1.0 + 0.2) / 3
+assert.ok(Math.abs(ai.teams.k1.gewogen - 0.72) < 1e-9);         // 0.7 × 0.6 + 0.3 × 1.0; "Los" telt niet mee in de weging
+assert.equal(ai.teams.k1.categorieen[0].naam, "Toetsen");
+assert.equal(ai.teams.k2.gewogen, null);                        // geen wegingen → alleen gewoon gemiddelde
+assert.equal(ai.teams.k2.eind, 0.75);
+assert.ok(Math.abs(ai.totaal - (0.72 + 0.75) / 2) < 1e-9);
+
+// Rubrics: rij "Samenwerken" komt in twee teams voor; niveaus met punten.
+const niv = [{ id: "l1", naam: "Onvoldoende", punten: 1 }, { id: "l2", naam: "Voldoende", punten: 2 }, { id: "l3", naam: "Goed", punten: 4 }];
+const rd = {
+  ...cd,
+  rubrics: {
+    a1: { id: "r1", naam: "Rubric Engels", niveaus: niv, rijen: [{ id: "q1", tekst: "Samenwerken", gewicht: null, criteria: [] }, { id: "q2", tekst: "Spelling", gewicht: null, criteria: [] }] },
+    a4: { id: "r2", naam: "Rubric Rekenen", niveaus: niv, rijen: [{ id: "q9", tekst: "samenwerken.", gewicht: null, criteria: [] }] }
+  },
+  submissions: {
+    a1: [{ id: "s1", status: "returned", recipient: { userId: "u1" }, outcomes: [{ "@odata.type": "#microsoft.graph.educationRubricOutcome", niveaus: [{ qualityId: "q1", columnId: "l3" }, { qualityId: "q2", columnId: "l1" }] }] }],
+    a4: [{ id: "s4", status: "returned", recipient: { userId: "u1" }, outcomes: [{ "@odata.type": "#microsoft.graph.educationRubricOutcome", niveaus: [{ qualityId: "q9", columnId: "l2" }] }] }]
+  }
+};
+const R = A.rubrics(rd, { periode: "schooljaar", nu });
+assert.deepEqual(R.rijen.map((r) => [r.tekst, r.n, r.aantalTeams, r.gedeeld]), [["Samenwerken", 2, 2, true], ["Spelling", 1, 1, false]]);
+assert.equal(R.rubrics.length, 2);
+const N = A.rijNiveaus(rd, R.rijen[0]);
+assert.equal(N[0].naam, "Aisha");
+assert.deepEqual(N[0].beoordelingen.map((b) => [b.klas, b.niveau, b.pct]), [["MIP26A - Rekenen", "Voldoende", 0.5], ["MIP26A - Engels", "Goed", 1]]);
+assert.equal(N[0].gemiddeld, 0.75);
+
 console.log("analyse.test.js: alles in orde");

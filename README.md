@@ -1,4 +1,4 @@
-# Docent Tools voor Teams (v0.3.5)
+# Docent Tools voor Teams (v0.4.0)
 
 Chrome-extensie voor Microsoft Teams (web) voor docenten: team-overstijgende analyses van opdrachten. Alles draait lokaal in je browser; er wordt niets naar een eigen server gestuurd. Zusje van [Docent Tools voor Magister](https://github.com/mark-jg/magister-docent), met dezelfde opzet.
 
@@ -18,6 +18,8 @@ Werkt ook in Edge (`edge://extensions`). Na elke update of herlaad van de extens
 | Functie | Hoe |
 |---|---|
 | **Opdrachten over alle teams**: per klas (afgeleid uit wie samen in dezelfde teams zit), per team, per leerling (over al je teams heen), per opdracht, komende deadlines, nakijkwerk en signalen | Alt+O, of via het zijpaneel of het extensie-icoon |
+| **Cijfers**: per leerling het gemiddelde per team, gewogen volgens de cijfercategorieën van dat team, plus een totaal; klik voor categorieën en opdrachten | tabblad Cijfers |
+| **Rubrics**: rubric-rijen die in meerdere opdrachten of teams voorkomen, met per leerling het gekozen niveau over al die voorkomens | tabblad Rubrics |
 | Export naar Excel: het geopende tabblad of alles in één werkmap (zes bladen, inclusief alle inleveringen) | knoppen bovenin het overzicht |
 | Filters: klassen (automatisch of zelf gekozen, wordt onthouden), periode (schooljaar, 90 dagen, 30 dagen, alles), "Alleen problemen", zoeken; sorteren door op een kolomkop te klikken | bovenin het overzicht |
 | Zijpaneel met status van de koppeling, modules aan/uit en thema | Alt+K of het handvat |
@@ -43,6 +45,12 @@ Standaard wordt de **klascode vóór het streepje** in de teamnaam gebruikt: "MI
 Standaard bepaalt de extensie dat automatisch met vier signalen uit Graph: is het een **klasteam** (teamtype Klas), is het **gearchiveerd**, ben jij **eigenaar**, en hoort het bij **dit schooljaar** (team aangemaakt sinds juni vóór het schooljaar, of opdrachten met een datum in dit schooljaar). Alleen eigen, actieve klasteams van dit jaar tellen mee; bovenin staat hoeveel er verborgen zijn en waarom. Via **Klassen** kies je zelf (zoekveld, vinkjes, Alles, Niets); die keuze wordt onthouden tot je weer op Automatisch klikt. Gearchiveerde teams worden standaard niet eens opgehaald (instelbaar), en opdrachten van vóór het vorige schooljaar vallen weg.
 
 **Alleen problemen** laat per tabblad alleen rijen zien met ontbrekend werk, te laat of nakijkwerk; de tellingen bovenin veranderen niet mee. Standaardvolgorde: Leerlingen en Signalen op ontbrekend werk, Opdrachten op deadline (nieuwste eerst), Deadlines op datum, Nakijken op wachttijd.
+
+### Cijfers en rubrics
+
+**Cijfers** toont per leerling en per team het gemiddelde als percentage van de maximale punten. Heeft het team cijfercategorieën met een weging (Opdrachten › Instellingen in Teams), dan wordt het gemiddelde per categorie berekend en gewogen opgeteld, genormaliseerd over de categorieën waarin de leerling cijfers heeft; opdrachten zonder categorie staan wel in de lijst maar tellen niet mee in de weging. Zonder wegingen geldt het gewone gemiddelde. Totaal is het gemiddelde over de teams. Rood onder 55%, oranje onder 70%.
+
+**Rubrics** haalt per opdracht de rubric op en herkent rijen (criteria) op hun tekst, zonder leestekens en hoofdletters. Rijen die in meerdere opdrachten of teams voorkomen zijn "gedeeld": klik erop en je ziet per leerling het gekozen niveau in elke opdracht, met een gemiddelde (punten van het niveau gedeeld door de hoogste punten in de rubric; zonder punten de positie van het niveau). Zo is een rij als "Samenwerken" over vakken heen te volgen. Het Excel-blad Rubric-niveaus per leerling bevat alles.
 
 Concept- en ingeplande opdrachten tellen niet mee. Vrijstelling (excused) telt niet als ontbrekend en niet mee in het gemiddelde.
 
@@ -82,6 +90,7 @@ Het zijpaneel toont onder **Koppeling** wat er aan de hand is:
 
 ## Wijzigingen
 
+- 0.4.0: tabblad Cijfers (gemiddelde per leerling per team, gewogen volgens de cijfercategorieën, met totaal en detail per categorie) en tabblad Rubrics (gelijke rubric-rijen over opdrachten en teams heen, met per leerling het gekozen niveau); Excel-bladen Cijfers, Cijfers per categorie, Rubric-rijen en Rubric-niveaus per leerling. Eerste keer bijwerken haalt alles opnieuw op.
 - 0.3.5: klascode vóór het streepje in de teamnaam is nu het standaardpatroon (MIP26A, MR26B, KD25); teams zonder code sluiten via overlap bij elke klas aan, ook een gecodeerde; de klasnaam is de meest voorkomende code in de groep; klassen zonder leerlingen staan niet meer in de keuzelijst en het tabblad.
 - 0.3.4: tabwissel en filters werkten niet meer in een Teams-tabblad dat open stond tijdens een update van de extensie (het opslaan van de keuze gooide een fout); dat opslaan blokkeert nu nooit meer, de extensie meldt dat het tabblad herladen moet worden, en een fout in het overzicht wordt getoond met kopieerbare details.
 - 0.3.3: ophalen veel sneller (aanroepen gebundeld per twintig, teams zonder eigenaarschap worden overgeslagen, instelbaar); een tweede klik tijdens het ophalen sluit aan op de lopende ronde in plaats van te blijven hangen op "Verbinden"; voortgang ook in het zijpaneel; melding als opslaan mislukt.
