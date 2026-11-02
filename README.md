@@ -1,4 +1,4 @@
-# Docent Tools voor Teams (v0.3.2)
+# Docent Tools voor Teams (v0.3.3)
 
 Chrome-extensie voor Microsoft Teams (web) voor docenten: team-overstijgende analyses van opdrachten. Alles draait lokaal in je browser; er wordt niets naar een eigen server gestuurd. Zusje van [Docent Tools voor Magister](https://github.com/mark-jg/magister-docent), met dezelfde opzet.
 
@@ -56,6 +56,8 @@ Een script in de pagina (`content/netlog.js`) onthoudt per host het Bearer-token
 
 De opgehaalde teams, opdrachten en inleveringen (alleen de velden die de analyse nodig heeft) blijven in `chrome.storage.local`, zodat het overzicht de volgende keer direct opent. Ze blijven ook bewaard bij een update van de extensie, zolang die in dezelfde map blijft staan (zelf bijwerken doet dat; een zip uitpakken over dezelfde map ook). Laad je de extensie uit een nieuwe map, dan ziet Chrome dat als een andere extensie met lege opslag.
 
+Het ophalen is gebundeld: aanroepen gaan per twintig tegelijk via Graph `$batch`, en teams waarvan je geen eigenaar bent worden niet doorzocht (instelbaar), net als gearchiveerde teams. Loopt er al een ronde, dan sluit een tweede klik daarop aan in plaats van te wachten.
+
 **Bijwerken** is incrementeel: teams, opdrachten en leden worden opnieuw opgehaald, maar inleveringen van opdrachten met een deadline ouder dan 45 dagen worden hergebruikt zolang de opdracht niet is gewijzigd. Dat scheelt het grootste deel van de aanroepen. Hoeveel schooljaren worden opgehaald staat in de instellingen (standaard dit en vorig schooljaar; minder is sneller), en de periodekeuze in het overzicht volgt dat. Grote tabellen tonen eerst 200 rijen (sorteren gebeurt over alles); met "Nog 500" of "Alles" zie je de rest. Standaard gebeurt bijwerken automatisch na 24 uur, op de achtergrond terwijl het oude overzicht in beeld blijft; eens per 7 dagen wordt toch alles opgehaald. Alt+klik op Bijwerken haalt alles direct opnieuw op; beide termijnen staan in de instellingen.
 
 ### Als de koppeling niet werkt
@@ -80,6 +82,7 @@ Het zijpaneel toont onder **Koppeling** wat er aan de hand is:
 
 ## Wijzigingen
 
+- 0.3.3: ophalen veel sneller (aanroepen gebundeld per twintig, teams zonder eigenaarschap worden overgeslagen, instelbaar); een tweede klik tijdens het ophalen sluit aan op de lopende ronde in plaats van te blijven hangen op "Verbinden"; voortgang ook in het zijpaneel; melding als opslaan mislukt.
 - 0.3.2: tabwissel is weer vlot (analyse wordt één keer per filtercombinatie berekend, tabellen in porties van 200 rijen); instelling hoeveel schooljaren worden opgehaald (1 tot 4), met bijpassende periodekeuze.
 - 0.3.1: opgehaalde gegevens blijven bruikbaar na een update van de extensie (aanvullen in plaats van opnieuw ophalen); Bijwerken is incrementeel (inleveringen van oude opdrachten worden hergebruikt) en gebeurt op de achtergrond terwijl het overzicht open blijft; automatisch bijwerken na 24 uur, alles opnieuw eens per 7 dagen; onbeperkte lokale opslag.
 - 0.3.0: klassen afgeleid uit lidmaatschap (wie samen in dezelfde teams zit) en optioneel uit een klascode in de teamnaam; nieuw tabblad Klassen met klaslijsten, kolom Klas bij Leerlingen en Signalen, keuzelijst Klas als filter, Excel-bladen Klassen en Klasindeling; het oude tabblad Klassen heet nu Teams.

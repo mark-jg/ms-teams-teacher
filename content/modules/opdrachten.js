@@ -5,7 +5,7 @@
  * De berekeningen staan in content/analyse.js. */
 TT.register({
   id: "opdrachten",
-  _data: null, _overlay: null, _busy: false, _view: "klassen", _sort: {}, _open: new Set(), _bron: null,
+  _data: null, _overlay: null, _view: "klassen", _sort: {}, _open: new Set(), _bron: null,
   /* auto: klassen automatisch bepalen (eigen, actieve klasteams van dit schooljaar); anders de onthouden keuze. */
   _filter: { periode: null, klassen: null, auto: true, problemen: false, klas: null, zoek: "" },
 
@@ -24,7 +24,7 @@ TT.register({
     d.schema = 3;
     if (!("me" in d)) d.me = null;
     d.volledigAt ??= d.at;
-    for (const c of d.classes) { c.isArchived ??= false; c.specialization ??= null; c.eigenaar ??= null; c.createdDateTime ??= null; }
+    for (const c of d.classes) { c.isArchived ??= false; c.specialization ??= null; c.eigenaar ??= null; c.createdDateTime ??= null; c.opgehaald ??= true; }
     d.members ??= {}; d.submissions ??= {}; d.namen ??= {}; d.fouten ??= [];
     return d;
   },
@@ -51,6 +51,7 @@ TT.register({
   },
   klasRedenen(c) {
     const r = [];
+    if (c.opgehaald === false) r.push("niet opgehaald");
     if (c.isArchived) r.push("gearchiveerd");
     if (c.specialization && c.specialization !== "educationClass") r.push("geen klasteam");
     if (c.eigenaar === false) r.push("geen eigenaar");
@@ -72,107 +73,140 @@ TT.register({
   /* ---------- Ophalen ----------
    * Het Graph-token met EduAssignments zit alleen in het frame van de app Opdrachten en mist EduRoster.
    * Daarom: klassen via /education/me/classes als dat mag, anders via de teams-lijst (/me/joinedTeams);
-   * leden via /education/classes/{id}/members als dat mag, anders via groepsleden minus eigenaren. */
-  async laden(TT, voortgang = () => {}, { volledig = false } = {}) {
-    if (this._busy) return;
-    this._busy = true;
+   * leden via /education/classes/{id}/members als dat mag, anders via groepsleden minus eigenaren.
+   * Alles wat per team of per opdracht nodig is gaat gebundeld via $batch (TT.graphMany), en teams
+   * waarvan je geen eigenaar bent worden overgeslagen (instelling alleTeams), net als gearchiveerde. */
+  _lopend: null,
+  laden(TT, voortgang = () => {}, { volledig = false } = {}) {
+    // Loopt er al een ronde, dan haakt deze aanroep daarop aan: zelfde voortgang, zelfde resultaat.
+    if (this._lopend) { this._lopend.cbs.push(voortgang); if (this._lopend.laatste) { try { voortgang(...this._lopend.laatste); } catch {} } return this._lopend.promise; }
+    const job = { cbs: [voortgang], laatste: null };
+    const melden = (txt, f) => { job.laatste = [txt, f]; for (const cb of job.cbs) { try { cb(txt, f); } catch {} } };
+    job.promise = this._laden(TT, melden, { volledig }).finally(() => { this._lopend = null; });
+    this._lopend = job;
+    return job.promise;
+  },
+  async _laden(TT, voortgang, { volledig }) {
+    const inst = TT.settings.opdrachten;
     // Incrementeel: oude inleveringen hergebruiken voor opdrachten waarvan de deadline langer dan 45 dagen
-    // voorbij is en de opdracht zelf niet is gewijzigd. Eens per 7 dagen toch alles (volledigDagen).
-    const oud = !volledig && this._data?.classes && Date.now() - (this._data.volledigAt || 0) < (TT.settings.opdrachten.volledigDagen ?? 7) * 864e5 ? this._data : null;
+    // voorbij is en de opdracht zelf niet is gewijzigd. Eens per volledigDagen toch alles.
+    const oud = !volledig && this._data?.classes && Date.now() - (this._data.volledigAt || 0) < (inst.volledigDagen ?? 7) * 864e5 ? this._data : null;
     const oudA = new Map((oud?.assignments || []).map((a) => [a.id, a]));
     let hergebruikt = 0;
-    try {
-      voortgang("Zoeken naar de app Opdrachten in Teams…", 0);
-      const w = await TT.graphWindow("EduAssignments", { wait: 90000, onWait: (sec) => voortgang(`Open de app Opdrachten in Teams (linkerbalk). Daarin zit het token dat de extensie nodig heeft. Wachten… ${sec}s`, 0) });
-      if (!w) throw new Error("Geen Graph-token met EduAssignments gevonden. Open in Teams de app Opdrachten (linkerbalk, eventueel via ⋯ Meer apps) en probeer opnieuw.");
-      voortgang("Klassen ophalen…", 0.03);
-      const me = (await TT.graph("/me?$select=id")).json?.id || null;
-      let classes = [], bron = "education";
-      const kl = await TT.graph("/education/me/classes?$select=id,displayName,classCode,externalName");
-      if (kl.status === 200) classes = kl.value.map((c) => ({ id: c.id, displayName: c.displayName, classCode: c.classCode || "", externalName: c.externalName || "" }));
-      else {
-        // Zonder EduRoster: alle teams; welke een klas is blijkt uit of de opdrachten-aanroep slaagt.
-        bron = "teams";
-        const jt = await TT.graph("/me/joinedTeams?$select=id,displayName,isArchived");
-        if (jt.status !== 200) throw new Error(`Klassen ophalen mislukt: education-API gaf HTTP ${kl.status}${kl.code ? " (" + kl.code + ")" : ""}, teams-lijst gaf HTTP ${jt.status}${jt.error ? ": " + jt.error : ""}`);
-        classes = jt.value.map((t) => ({ id: t.id, displayName: t.displayName, classCode: "", externalName: "", isArchived: !!t.isArchived }));
-      }
-      if (!classes.length) throw new Error("Geen klassen of teams gevonden.");
-      // Per team: type (klasteam?), archief en aanmaakdatum, in één $batch.
-      voortgang(`Teamgegevens ophalen (${classes.length})…`, 0.04);
-      const meta = await TT.graphBatch(classes.map((c) => ({ key: c.id, url: `/teams/${c.id}?$select=id,specialization,isArchived,createdDateTime` })));
-      for (const c of classes) { const m = meta.get(c.id); if (m?.status === 200 && m.body) { c.specialization = m.body.specialization || null; c.isArchived = !!m.body.isArchived; c.createdDateTime = m.body.createdDateTime || null; } }
-      if (bron === "teams") classes = classes.filter((c) => !c.specialization || c.specialization === "educationClass" || c.specialization === "none");
-      if (!TT.settings.opdrachten.gearchiveerd) classes = classes.filter((c) => !c.isArchived);
-      if (!classes.length) throw new Error("Alleen gearchiveerde of niet-klasteams gevonden. Zet in de instellingen 'ook gearchiveerde teams' aan als je die wilt zien.");
-      const members = {}, assignments = [];
-      let n = 0, rosterOk = null;
-      await TT.pool(classes, 3, async (c) => {
-        const a = await TT.graph(`/education/classes/${c.id}/assignments`);
-        if (a.status === 200) {
-          c.klas = true;
-          for (const x of a.value) assignments.push({ id: x.id, classId: c.id, displayName: x.displayName, status: x.status, dueDateTime: x.dueDateTime, assignedDateTime: x.assignedDateTime, closeDateTime: x.closeDateTime, createdDateTime: x.createdDateTime, lastModifiedDateTime: x.lastModifiedDateTime, allowLateSubmissions: x.allowLateSubmissions, grading: x.grading ? { "@odata.type": x.grading["@odata.type"], maxPoints: x.grading.maxPoints } : null, webUrl: x.webUrl });
-        } else { c.klas = bron === "education"; c.fout = `opdrachten: HTTP ${a.status}${a.code ? " " + a.code : ""}`; }
-        if (c.klas) {
-          const [m, go] = await Promise.all([
-            rosterOk === false ? { status: 403 } : TT.graph(`/education/classes/${c.id}/members?$select=id,displayName,primaryRole`),
-            TT.graph(`/groups/${c.id}/owners?$select=id`)
-          ]);
-          const owners = new Set((go.value || []).map((u) => u.id));
-          c.eigenaar = go.status === 200 && me ? owners.has(me) : null;
-          if (m.status === 200) { rosterOk = true; members[c.id] = m.value.filter((u) => (u.primaryRole || "student") === "student").map((u) => ({ id: u.id, displayName: u.displayName, primaryRole: u.primaryRole })); }
-          else {
-            if (m.status === 403 || m.status === 401) rosterOk = false;
-            const gm = await TT.graph(`/groups/${c.id}/members?$select=id,displayName`);
-            members[c.id] = gm.status === 200 ? gm.value.filter((u) => !owners.has(u.id) && /user$/i.test(u["@odata.type"] || "#microsoft.graph.user")).map((u) => ({ id: u.id, displayName: u.displayName, primaryRole: "student" })) : [];
-          }
-        }
-        voortgang(`Opdrachten van ${++n}/${classes.length} ${bron === "teams" ? "teams" : "klassen"}…`, 0.05 + 0.25 * (n / classes.length));
-      });
-      // Bij de teams-lijst vallen teams zonder werkende opdrachten-API (geen klasteam) weg.
-      classes = classes.filter((c) => c.klas);
-      if (!classes.length) throw new Error(bron === "teams" ? "Geen enkel team gaf opdrachten terug. Ben je eigenaar van een klasteam (teamtype Klas)?" : "Graph geeft geen klassen terug.");
-      // Opdrachten van vóór het vorige schooljaar vallen weg: scheelt veel aanroepen en ze doen niet mee.
-      const jaren = Math.min(6, Math.max(1, TT.settings.opdrachten.schooljaren || 2));
-      const oudGrens = new Date(this.schooljaarStart().getFullYear() - (jaren - 1), 7, 1);
-      const datum = (a) => new Date(a.dueDateTime || a.assignedDateTime || a.createdDateTime || 0);
-      const weggelaten = assignments.filter((a) => datum(a) < oudGrens).length;
-      const recent = assignments.filter((a) => datum(a) >= oudGrens);
-      assignments.length = 0; assignments.push(...recent);
-      const actief = assignments.filter((a) => ["published", "assigned", "inactive"].includes(a.status));
-      const submissions = {}; let k = 0;
-      const grens45 = Date.now() - 45 * 864e5;
-      const herbruikbaar = (a) => {
-        const o = oudA.get(a.id), subs = oud?.submissions?.[a.id];
-        if (!o || !subs) return false;
-        const due = a.dueDateTime ? new Date(a.dueDateTime).getTime() : null;
-        return due != null && due < grens45 && (!o.lastModifiedDateTime || o.lastModifiedDateTime === a.lastModifiedDateTime);
-      };
-      await TT.pool(actief, 4, async (a) => {
-        if (herbruikbaar(a)) { submissions[a.id] = oud.submissions[a.id]; hergebruikt++; voortgang(`Inleveringen van ${++k}/${actief.length} opdrachten… (${hergebruikt} hergebruikt)`, 0.3 + 0.6 * (k / actief.length)); return; }
-        const s = await TT.graph(`/education/classes/${a.classId}/assignments/${a.id}/submissions?$expand=outcomes`);
-        submissions[a.id] = s.status === 200 ? s.value.map((x) => ({ id: x.id, status: x.status, submittedDateTime: x.submittedDateTime, returnedDateTime: x.returnedDateTime, reassignedDateTime: x.reassignedDateTime, excusedDateTime: x.excusedDateTime, recipient: { userId: x.recipient?.userId || x.recipient?.id || null },
-          outcomes: (x.outcomes || []).filter((o) => /pointsOutcome/i.test(o["@odata.type"] || "")).map((o) => ({ "@odata.type": o["@odata.type"], points: o.points ? { points: o.points.points } : null, publishedPoints: o.publishedPoints ? { points: o.publishedPoints.points } : null })) })) : [];
-        if (s.status !== 200) a.fout = `inleveringen: HTTP ${s.status}`;
-        voortgang(`Inleveringen van ${++k}/${actief.length} opdrachten…${hergebruikt ? ` (${hergebruikt} hergebruikt)` : ""}`, 0.3 + 0.6 * (k / actief.length));
-      });
-      // Namen van leerlingen die niet (meer) lid zijn: via $batch op /users.
-      const bekend = new Set(Object.values(members).flat().map((u) => u.id));
-      const onbekend = [...new Set(Object.values(submissions).flat().map((s) => s.recipient.userId).filter((u) => u && !bekend.has(u)))];
-      const namen = {};
-      if (onbekend.length) {
-        voortgang(`Namen ophalen (${onbekend.length})…`, 0.92);
-        const res = await TT.graphBatch(onbekend.map((id) => ({ key: id, url: `/users/${id}?$select=id,displayName` })));
-        for (const [id, r] of res) if (r.status === 200 && r.body?.displayName) namen[id] = r.body.displayName;
-      }
-      const fouten = [...classes.filter((c) => c.fout).map((c) => `${c.displayName}: ${c.fout}`), ...actief.filter((a) => a.fout).map((a) => `${a.displayName}: ${a.fout}`)];
-      const data = { schema: 3, at: Date.now(), volledigAt: oud ? oud.volledigAt || oud.at : Date.now(), hergebruikt, bron, rosterOk, me, weggelaten, classes: classes.map(({ id, displayName, classCode, externalName, isArchived, specialization, eigenaar, createdDateTime }) => ({ id, displayName, classCode, externalName, isArchived: !!isArchived, specialization: specialization || null, eigenaar: eigenaar ?? null, createdDateTime: createdDateTime || null })), members, assignments, submissions, namen, fouten };
-      this._data = data;
-      try { await chrome.storage.local.set({ ttData: data }); } catch (e) { console.warn("[TT] opslaan mislukt", e); }
-      voortgang("Klaar", 1);
-      this.renderWidget(TT);
-      return data;
-    } finally { this._busy = false; }
+    voortgang("Zoeken naar de app Opdrachten in Teams…", 0);
+    const w = await TT.graphWindow("EduAssignments", { wait: 90000, onWait: (sec) => voortgang(`Open de app Opdrachten in Teams (linkerbalk). Daarin zit het token dat de extensie nodig heeft. Wachten… ${sec}s`, 0) });
+    if (!w) throw new Error("Geen Graph-token met EduAssignments gevonden. Open in Teams de app Opdrachten (linkerbalk, eventueel via ⋯ Meer apps) en probeer opnieuw.");
+    voortgang("Klassen ophalen…", 0.02);
+    const me = (await TT.graph("/me?$select=id")).json?.id || null;
+    let classes = [], bron = "education";
+    const kl = await TT.graph("/education/me/classes?$select=id,displayName,classCode,externalName");
+    if (kl.status === 200) classes = kl.value.map((c) => ({ id: c.id, displayName: c.displayName, classCode: c.classCode || "", externalName: c.externalName || "" }));
+    else {
+      bron = "teams";
+      const jt = await TT.graph("/me/joinedTeams?$select=id,displayName,isArchived");
+      if (jt.status !== 200) throw new Error(`Klassen ophalen mislukt: education-API gaf HTTP ${kl.status}${kl.code ? " (" + kl.code + ")" : ""}, teams-lijst gaf HTTP ${jt.status}${jt.error ? ": " + jt.error : ""}`);
+      classes = jt.value.map((t) => ({ id: t.id, displayName: t.displayName, classCode: "", externalName: "", isArchived: !!t.isArchived }));
+    }
+    if (!classes.length) throw new Error("Geen klassen of teams gevonden.");
+    const totaalTeams = classes.length;
+
+    // 1. Teamgegevens (type, archief, aanmaakdatum) en eigenaren, gebundeld.
+    voortgang(`Teamgegevens ophalen (${classes.length} teams)…`, 0.04);
+    const meta = await TT.graphMany(classes.map((c) => ({ key: c.id, url: `/teams/${c.id}?$select=id,specialization,isArchived,createdDateTime` })));
+    for (const c of classes) { const m = meta.get(c.id); if (m?.status === 200 && m.json) { c.specialization = m.json.specialization || null; c.isArchived = !!m.json.isArchived; c.createdDateTime = m.json.createdDateTime || null; } }
+    if (bron === "teams") classes = classes.filter((c) => !c.specialization || c.specialization === "educationClass" || c.specialization === "none");
+    if (!inst.gearchiveerd) classes = classes.filter((c) => !c.isArchived);
+    if (!classes.length) throw new Error("Alleen gearchiveerde of niet-klasteams gevonden. Zet in de instellingen 'ook gearchiveerde teams' aan als je die wilt zien.");
+    voortgang(`Eigenaren ophalen (${classes.length} teams)…`, 0.08);
+    const own = await TT.graphMany(classes.map((c) => ({ key: c.id, url: `/groups/${c.id}/owners?$select=id` })));
+    const ownersVan = new Map();
+    for (const c of classes) { const o = own.get(c.id); const set = new Set((o?.value || []).map((u) => u.id)); ownersVan.set(c.id, set); c.eigenaar = o?.status === 200 && me ? set.has(me) : null; }
+    // Alleen eigen teams doorzoeken, tenzij de instelling anders zegt of een team handmatig is gekozen.
+    const handmatig = this._filter.klassen && !this._filter.auto ? this._filter.klassen : new Set();
+    for (const c of classes) c.opgehaald = inst.alleTeams || c.eigenaar !== false || handmatig.has(c.id);
+    const doen = classes.filter((c) => c.opgehaald);
+    if (!doen.length) throw new Error(`Van de ${classes.length} teams ben je nergens eigenaar. Zet in de instellingen 'ook teams waarvan ik geen eigenaar ben' aan.`);
+
+    // 2. Opdrachten per klas, gebundeld.
+    voortgang(`Opdrachten ophalen (${doen.length} teams)…`, 0.12);
+    const assignments = [];
+    const asg = await TT.graphMany(doen.map((c) => ({ key: c.id, url: `/education/classes/${c.id}/assignments` })), { onProgress: (n, t) => voortgang(`Opdrachten van ${n}/${t} teams…`, 0.12 + 0.1 * (n / t)) });
+    for (const c of doen) {
+      const a = asg.get(c.id);
+      if (a?.status === 200) {
+        c.klas = true;
+        for (const x of a.value) assignments.push({ id: x.id, classId: c.id, displayName: x.displayName, status: x.status, dueDateTime: x.dueDateTime, assignedDateTime: x.assignedDateTime, closeDateTime: x.closeDateTime, createdDateTime: x.createdDateTime, lastModifiedDateTime: x.lastModifiedDateTime, allowLateSubmissions: x.allowLateSubmissions, grading: x.grading ? { "@odata.type": x.grading["@odata.type"], maxPoints: x.grading.maxPoints } : null, webUrl: x.webUrl });
+      } else { c.klas = bron === "education"; c.fout = `opdrachten: HTTP ${a?.status}${a?.code ? " " + a.code : ""}`; }
+    }
+    // Bij de teams-lijst vallen teams zonder werkende opdrachten-API (geen klasteam) weg.
+    const eerder = classes.length;
+    classes = classes.filter((c) => !c.opgehaald || c.klas);
+    if (!classes.some((c) => c.klas)) throw new Error(bron === "teams" ? "Geen enkel team gaf opdrachten terug. Ben je eigenaar van een klasteam (teamtype Klas)?" : "Graph geeft geen klassen terug.");
+
+    // 3. Leden: education-rooster als dat mag, anders groepsleden minus eigenaren.
+    const klassen = classes.filter((c) => c.klas);
+    voortgang(`Leden ophalen (${klassen.length} klassen)…`, 0.24);
+    const members = {};
+    const proef = await TT.graph(`/education/classes/${klassen[0].id}/members?$select=id,displayName,primaryRole`);
+    const rosterOk = proef.status === 200;
+    const mem = await TT.graphMany(klassen.map((c) => ({ key: c.id, url: rosterOk ? `/education/classes/${c.id}/members?$select=id,displayName,primaryRole` : `/groups/${c.id}/members?$select=id,displayName` })));
+    for (const c of klassen) {
+      const m = mem.get(c.id);
+      if (m?.status !== 200) { members[c.id] = oud?.members?.[c.id] || []; continue; }
+      const owners = ownersVan.get(c.id) || new Set();
+      members[c.id] = rosterOk
+        ? m.value.filter((u) => (u.primaryRole || "student") === "student").map((u) => ({ id: u.id, displayName: u.displayName, primaryRole: u.primaryRole }))
+        : m.value.filter((u) => !owners.has(u.id) && /user$/i.test(u["@odata.type"] || "#microsoft.graph.user")).map((u) => ({ id: u.id, displayName: u.displayName, primaryRole: "student" }));
+    }
+
+    // 4. Inleveringen, alleen voor recente, actieve opdrachten; oude inleveringen hergebruiken.
+    const jaren = Math.min(6, Math.max(1, inst.schooljaren || 2));
+    const oudGrens = new Date(this.schooljaarStart().getFullYear() - (jaren - 1), 7, 1);
+    const datum = (a) => new Date(a.dueDateTime || a.assignedDateTime || a.createdDateTime || 0);
+    const weggelaten = assignments.filter((a) => datum(a) < oudGrens).length;
+    const recent = assignments.filter((a) => datum(a) >= oudGrens);
+    assignments.length = 0; assignments.push(...recent);
+    const actief = assignments.filter((a) => ["published", "assigned", "inactive"].includes(a.status));
+    const submissions = {};
+    const grens45 = Date.now() - 45 * 864e5;
+    const herbruikbaar = (a) => {
+      const o = oudA.get(a.id), subs = oud?.submissions?.[a.id];
+      if (!o || !subs) return false;
+      const due = a.dueDateTime ? new Date(a.dueDateTime).getTime() : null;
+      return due != null && due < grens45 && (!o.lastModifiedDateTime || o.lastModifiedDateTime === a.lastModifiedDateTime);
+    };
+    const ophalen = [];
+    for (const a of actief) { if (herbruikbaar(a)) { submissions[a.id] = oud.submissions[a.id]; hergebruikt++; } else ophalen.push(a); }
+    voortgang(`Inleveringen ophalen (${ophalen.length} opdrachten${hergebruikt ? `, ${hergebruikt} hergebruikt` : ""})…`, 0.3);
+    const subs = await TT.graphMany(ophalen.map((a) => ({ key: a.id, url: `/education/classes/${a.classId}/assignments/${a.id}/submissions?$expand=outcomes` })), { onProgress: (n, t) => voortgang(`Inleveringen van ${n}/${t} opdrachten…${hergebruikt ? ` (${hergebruikt} hergebruikt)` : ""}`, 0.3 + 0.6 * (n / t)) });
+    for (const a of ophalen) {
+      const r = subs.get(a.id);
+      if (r?.status !== 200) { a.fout = `inleveringen: HTTP ${r?.status}`; submissions[a.id] = oud?.submissions?.[a.id] || []; continue; }
+      submissions[a.id] = r.value.map((x) => ({ id: x.id, status: x.status, submittedDateTime: x.submittedDateTime, returnedDateTime: x.returnedDateTime, reassignedDateTime: x.reassignedDateTime, excusedDateTime: x.excusedDateTime, recipient: { userId: x.recipient?.userId || x.recipient?.id || null },
+        outcomes: (x.outcomes || []).filter((o) => /pointsOutcome/i.test(o["@odata.type"] || "")).map((o) => ({ "@odata.type": o["@odata.type"], points: o.points ? { points: o.points.points } : null, publishedPoints: o.publishedPoints ? { points: o.publishedPoints.points } : null })) }));
+    }
+
+    // 5. Namen van leerlingen die niet (meer) lid zijn.
+    const bekend = new Set(Object.values(members).flat().map((u) => u.id));
+    const onbekend = [...new Set(Object.values(submissions).flat().map((s) => s.recipient.userId).filter((u) => u && !bekend.has(u)))];
+    const namen = { ...(oud?.namen || {}) };
+    const nogOp = onbekend.filter((u) => !namen[u]);
+    if (nogOp.length) {
+      voortgang(`Namen ophalen (${nogOp.length})…`, 0.92);
+      const res = await TT.graphMany(nogOp.map((id) => ({ key: id, url: `/users/${id}?$select=id,displayName` })), { prefer: "User.Read" });
+      for (const [id, r] of res) if (r.status === 200 && r.json?.displayName) namen[id] = r.json.displayName;
+    }
+    const fouten = [...classes.filter((c) => c.fout).map((c) => `${c.displayName}: ${c.fout}`), ...actief.filter((a) => a.fout).map((a) => `${a.displayName}: ${a.fout}`)];
+    const data = { schema: 3, at: Date.now(), volledigAt: oud ? oud.volledigAt || oud.at : Date.now(), hergebruikt, bron, rosterOk, me, weggelaten, totaalTeams, nietKlas: eerder - classes.length,
+      classes: classes.map(({ id, displayName, classCode, externalName, isArchived, specialization, eigenaar, createdDateTime, opgehaald }) => ({ id, displayName, classCode, externalName, isArchived: !!isArchived, specialization: specialization || null, eigenaar: eigenaar ?? null, createdDateTime: createdDateTime || null, opgehaald: !!opgehaald })),
+      members, assignments, submissions, namen, fouten };
+    this._data = data;
+    voortgang("Opslaan…", 0.98);
+    try { await chrome.storage.local.set({ ttData: data }); }
+    catch (e) { console.warn("[TT] opslaan mislukt", e); TT.toast(`Opslaan van de gegevens mislukt (${e?.message || e}); het overzicht werkt wel, maar na herladen moet alles opnieuw worden opgehaald.`, "err", 8000); }
+    voortgang("Klaar", 1);
+    this.renderWidget(TT);
+    return data;
   },
 
   /* Klassen afgeleid uit lidmaatschap en teamnaam (zie analyse.js), binnen de geselecteerde teams. */
@@ -213,7 +247,7 @@ TT.register({
   /* ---------- Widget in het zijpaneel ---------- */
   renderWidget(TT) {
     const host = document.getElementById("tt-opdrachten-widget"); if (!host) return;
-    if (!this._data) return host.replaceChildren(TT.el("p", { class: "tt-muted", text: "Nog niets opgehaald. Klik op Overzicht openen; de eerste keer duurt het even (één aanroep per opdracht)." }));
+    if (!this._data) return host.replaceChildren(TT.el("p", { class: "tt-muted", text: "Nog niets opgehaald. Klik op Overzicht openen; de eerste keer duurt het even." }), TT.el("div", { class: "tt-muted tt-bijwerk", "aria-live": "polite", text: this._lopend?.laatste ? `Bezig: ${this._lopend.laatste[0]}` : "" }));
     const r = this.analyse(TT);
     host.replaceChildren(
       TT.el("div", { class: "tt-stat" }, [["Klassen", this.klassen(TT).klassen.length], ["Teams", r.totaal.klassen], ["Opdrachten", r.totaal.opdrachten], ["Leerlingen", r.totaal.leerlingen], ["Na te kijken", r.totaal.nakijken], ["Signalen", r.signalen.length]].map(([l, v]) => TT.el("div", {}, [TT.el("b", { text: String(v) }), TT.el("small", { text: l })]))),
@@ -262,7 +296,6 @@ TT.register({
   },
   /* Bijwerken op de achtergrond terwijl het overzicht open blijft; de werkbalk toont de voortgang. */
   async bijwerken(TT, { volledig = false } = {}) {
-    if (this._busy) return;
     const status = (txt) => { const el = this._overlay?.querySelector("#tt-bijwerk-status"); if (el) el.textContent = txt; const w = document.querySelector("#tt-opdrachten-widget .tt-bijwerk"); if (w) w.textContent = txt; };
     try {
       await this.laden(TT, (txt) => status(`Bijwerken: ${txt}`), { volledig });

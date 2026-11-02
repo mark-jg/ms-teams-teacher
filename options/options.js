@@ -9,7 +9,7 @@ async function load() {
   settings = merge(structuredClone(DEFAULTS), stored);
   for (const el of document.querySelectorAll("[data-path]")) {
     const v = get(settings, el.dataset.path);
-    if (el.type === "checkbox") el.checked = v === true || (v !== false && el.dataset.path !== "opdrachten.gearchiveerd");
+    if (el.type === "checkbox") el.checked = v === true || (v !== false && !["opdrachten.gearchiveerd", "opdrachten.alleTeams"].includes(el.dataset.path));
     else el.value = v ?? "";
   }
   dataInfo();

@@ -209,6 +209,37 @@
       return out;
     },
 
+    /* Veel GET's gebundeld via $batch (20 per aanroep, 2 tegelijk). reqs = [{ key, url }] met url relatief
+     * aan /v1.0. Geeft Map key → { status, value (alle pagina's), json, error, code }. Aanroepen die Graph
+     * afremt (429/503) worden na een pauze opnieuw gedaan. */
+    async graphMany(reqs, { prefer = "EduAssignments", onProgress = null, pool = 2 } = {}) {
+      const out = new Map();
+      if (!reqs.length) return out;
+      const w = await TT.graphWindow(prefer);
+      if (!w) { for (const r of reqs) out.set(r.key, { status: 0, error: "geen Graph-token met education-scopes", noToken: true, value: [] }); return out; }
+      let done = 0, wacht = [...reqs];
+      for (let poging = 0; wacht.length && poging < 4; poging++) {
+        if (poging) await new Promise((res) => setTimeout(res, 4000 * poging));
+        const opnieuw = [];
+        const chunks = []; for (let i = 0; i < wacht.length; i += 20) chunks.push(wacht.slice(i, i + 20));
+        await TT.pool(chunks, pool, async (chunk) => {
+          const r = await TT.api(`${GRAPH}/$batch`, { win: w, prefer, method: "POST", timeout: 90000, body: { requests: chunk.map((q, j) => ({ id: String(j), method: "GET", url: q.url, headers: { Accept: "application/json", Prefer: "include-unknown-enum-members" } })) } });
+          if (r.status !== 200 || !Array.isArray(r.json?.responses)) { opnieuw.push(...chunk); return; }
+          for (const resp of r.json.responses) {
+            const q = chunk[+resp.id]; if (!q) continue;
+            if ([429, 503, 504].includes(resp.status)) { opnieuw.push(q); continue; }
+            const res = { status: resp.status, json: resp.body, value: Array.isArray(resp.body?.value) ? [...resp.body.value] : [], error: resp.body?.error?.message, code: resp.body?.error?.code };
+            let next = resp.body?.["@odata.nextLink"], guard = 0;
+            while (next && guard++ < 50) { const pg = await TT.api(next, { win: w, prefer }); if (pg.status !== 200) break; res.value.push(...(pg.json?.value || [])); next = pg.json?.["@odata.nextLink"]; }
+            out.set(q.key, res); done++; onProgress && onProgress(done, reqs.length);
+          }
+        });
+        wacht = opnieuw;
+      }
+      for (const q of wacht) out.set(q.key, { status: 429, error: "Graph remt af; probeer later opnieuw", value: [] });
+      return out;
+    },
+
     /* Beperkte gelijktijdigheid voor veel kleine calls. */
     async pool(items, limit, fn, onProgress) {
       const results = new Array(items.length); let next = 0, done = 0;
