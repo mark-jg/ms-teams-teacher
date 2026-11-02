@@ -30,7 +30,9 @@ TT.register({
   },
   saveFilter() {
     const f = this._filter;
-    chrome.storage.local.set({ ttFilter: { periode: f.periode, klassen: f.klassen ? [...f.klassen] : null, auto: f.auto, problemen: f.problemen, klas: f.klas, view: this._view } }).catch(() => {});
+    // Mag nooit een klik blokkeren: zonder extensiecontext gaat de keuze alleen niet mee naar de volgende keer.
+    try { chrome.storage.local.set({ ttFilter: { periode: f.periode, klassen: f.klassen ? [...f.klassen] : null, auto: f.auto, problemen: f.problemen, klas: f.klas, view: this._view } }).catch(() => {}); }
+    catch { TT.meldDood(); }
   },
 
   /* ---------- Welke klassen tellen mee ----------
@@ -267,6 +269,7 @@ TT.register({
 
   /* ---------- Overzicht ---------- */
   async open(TT, { vernieuw = false, volledig = false } = {}) {
+    if (!TT.alive()) TT.meldDood();
     if (!this._overlay) {
       this._overlay = TT.el("div", { id: "tt-overlay", role: "dialog", "aria-label": "Opdrachten over alle teams", onclick: (e) => { if (e.target === this._overlay) this.close(); } });
       document.body.append(this._overlay);
@@ -311,21 +314,21 @@ TT.register({
     const r = this.analyse(TT);
     const K = this.klassen(TT);
     const views = [["groepen", "Klassen", K.klassen.length], ["klassen", "Teams", r.klassen.length], ["leerlingen", "Leerlingen", r.leerlingen.length], ["opdrachten", "Opdrachten", r.opdrachten.length], ["deadlines", "Deadlines", r.deadlines.length], ["nakijken", "Nakijken", r.nakijken.length], ["signalen", "Signalen", r.signalen.length]];
-    const tabs = TT.el("div", { class: "tt-tabs", role: "tablist" }, views.map(([id, l, n]) => TT.el("button", { class: "tt-tab" + (this._view === id ? " is-on" : ""), role: "tab", "aria-selected": String(this._view === id), "data-view": id, onclick: (e) => {
-      this._view = id; this.saveFilter(); this._limiet = null;
+    const tabs = TT.el("div", { class: "tt-tabs", role: "tablist" }, views.map(([id, l, n]) => TT.el("button", { class: "tt-tab" + (this._view === id ? " is-on" : ""), role: "tab", "aria-selected": String(this._view === id), "data-view": id, onclick: () => TT.guard(() => {
+      this._view = id; this._limiet = null;
       for (const b of tabs.querySelectorAll(".tt-tab")) { const on = b.dataset.view === id; b.classList.toggle("is-on", on); b.setAttribute("aria-selected", String(on)); }
-      this.renderBody(TT);
-    } }, [l, TT.el("span", { class: "tt-n", text: String(n) })])));
-    const periode = TT.el("select", { class: "tt-select", "aria-label": "Periode", onchange: (e) => { this._filter.periode = e.target.value; this.saveFilter(); this.render(TT); this.renderWidget(TT); } }, this.periodeOpties(TT).map(([v, l]) => TT.el("option", { value: v, text: l })));
+      this.renderBody(TT); this.saveFilter();
+    }, "Tabblad") }, [l, TT.el("span", { class: "tt-n", text: String(n) })])));
+    const periode = TT.el("select", { class: "tt-select", "aria-label": "Periode", onchange: (e) => TT.guard(() => { this._filter.periode = e.target.value; this.render(TT); this.renderWidget(TT); this.saveFilter(); }, "Periode") }, this.periodeOpties(TT).map(([v, l]) => TT.el("option", { value: v, text: l })));
     if (!this.periodeOpties(TT).some(([v]) => v === this._filter.periode)) this._filter.periode = "schooljaar";
     periode.value = this._filter.periode;
-    const zoek = TT.el("input", { class: "tt-input", type: "search", placeholder: "Zoek leerling of opdracht…", "aria-label": "Zoeken", value: this._filter.zoek, oninput: (e) => { this._filter.zoek = e.target.value; this._limiet = null; this.renderBody(TT); } });
+    const zoek = TT.el("input", { class: "tt-input", type: "search", placeholder: "Zoek leerling of opdracht…", "aria-label": "Zoeken", value: this._filter.zoek, oninput: (e) => TT.guard(() => { this._filter.zoek = e.target.value; this._limiet = null; this.renderBody(TT); }, "Zoeken") });
     const sel = this.selectie(), totaal = this._data.classes.length, nSel = sel ? sel.size : totaal;
-    const kiezer = TT.el("button", { class: "tt-btn", id: "tt-kiezer-knop", "aria-haspopup": "dialog", text: `Klassen: ${nSel} van ${totaal} ▾`, onclick: (e) => this.kiezer(TT, e.currentTarget) });
+    const kiezer = TT.el("button", { class: "tt-btn", id: "tt-kiezer-knop", "aria-haspopup": "dialog", text: `Klassen: ${nSel} van ${totaal} ▾`, onclick: (e) => TT.guard(() => this.kiezer(TT, e.currentTarget), "Klassenkiezer") });
     if (this._filter.klas && !K.klassen.some((k) => k.naam === this._filter.klas)) this._filter.klas = null;
-    const klasSel = TT.el("select", { class: "tt-select", "aria-label": "Klas", onchange: (e) => { this._filter.klas = e.target.value || null; this.saveFilter(); this.render(TT); } }, [TT.el("option", { value: "", text: "Alle klassen" }), ...K.klassen.map((k) => TT.el("option", { value: k.naam, text: `${k.naam} (${k.leerlingen.length})` }))]);
+    const klasSel = TT.el("select", { class: "tt-select", "aria-label": "Klas", onchange: (e) => TT.guard(() => { this._filter.klas = e.target.value || null; this.render(TT); this.saveFilter(); }, "Klasfilter") }, [TT.el("option", { value: "", text: "Alle klassen" }), ...K.klassen.map((k) => TT.el("option", { value: k.naam, text: `${k.naam} (${k.leerlingen.length})` }))]);
     klasSel.value = this._filter.klas || "";
-    const prob = TT.el("button", { class: "tt-chip tt-chip-btn" + (this._filter.problemen ? "" : " is-off"), "aria-pressed": String(this._filter.problemen), title: "Alleen rijen met ontbrekend werk, te laat of nakijkwerk", text: "Alleen problemen", onclick: () => { this._filter.problemen = !this._filter.problemen; this.saveFilter(); this.render(TT); } });
+    const prob = TT.el("button", { class: "tt-chip tt-chip-btn" + (this._filter.problemen ? "" : " is-off"), "aria-pressed": String(this._filter.problemen), title: "Alleen rijen met ontbrekend werk, te laat of nakijkwerk", text: "Alleen problemen", onclick: () => TT.guard(() => { this._filter.problemen = !this._filter.problemen; this.render(TT); this.saveFilter(); }, "Alleen problemen") });
     const verborgen = this._filter.auto && sel ? this._data.classes.filter((c) => !sel.has(c.id)) : [];
     const redenTel = {}; for (const c of verborgen) for (const r of this.klasRedenen(c)) redenTel[r] = (redenTel[r] || 0) + 1;
     const verborgenTxt = verborgen.length ? `${verborgen.length} verborgen (${Object.entries(redenTel).map(([r, n]) => `${n} ${r}`).join(", ")})` : "";
@@ -363,7 +366,7 @@ TT.register({
         const red = this.klasRedenen(c);
         const cb = TT.el("input", { type: "checkbox", onchange: () => {
           const s = new Set(sel || alle()); cb.checked ? s.add(c.id) : s.delete(c.id);
-          this._filter.auto = false; this._filter.klassen = s.size === alle().size ? null : s; this.saveFilter(); this.render(TT); this.renderWidget(TT); bouw(); kop();
+          TT.guard(() => { this._filter.auto = false; this._filter.klassen = s.size === alle().size ? null : s; this.render(TT); this.renderWidget(TT); bouw(); kop(); this.saveFilter(); }, "Klas kiezen");
         } });
         cb.checked = on;
         const kl = this._klassen?.teamKlas?.[c.id];
@@ -372,7 +375,7 @@ TT.register({
       if (!lijst.children.length) lijst.append(TT.el("div", { class: "tt-muted", style: "padding:8px", text: "Geen klas gevonden." }));
     };
     const zoek = TT.el("input", { class: "tt-input", type: "search", placeholder: "Zoek klas…", "aria-label": "Zoek klas", oninput: (e) => { q = e.target.value.trim().toLowerCase(); bouw(); } });
-    const knop = (txt, title, fn) => TT.el("button", { class: "tt-btn tt-btn-sm", text: txt, title, onclick: () => { fn(); this.saveFilter(); this.render(TT); this.renderWidget(TT); bouw(); kop(); } });
+    const knop = (txt, title, fn) => TT.el("button", { class: "tt-btn tt-btn-sm", text: txt, title, onclick: () => TT.guard(() => { fn(); this.render(TT); this.renderWidget(TT); bouw(); kop(); this.saveFilter(); }, "Klassen") });
     const kopEl = TT.el("div", { class: "tt-muted", style: "padding:4px 2px 0" });
     const kop = () => { const sel = this.selectie(); kopEl.textContent = this._filter.auto ? `Automatisch: ${sel ? sel.size : this._data.classes.length} eigen, actieve klasteams van dit schooljaar.` : `Handmatige keuze: ${sel ? sel.size : this._data.classes.length} van ${this._data.classes.length}.`; };
     box.append(zoek, TT.el("div", { class: "tt-row", style: "margin:8px 0 2px" }, [
@@ -386,6 +389,21 @@ TT.register({
   },
 
   renderBody(TT) {
+    try { this._renderBody(TT); }
+    catch (e) {
+      console.error("[Docent Tools] overzicht", e);
+      const details = `Docent Tools v${TT.version} · tabblad ${this._view}\n${e?.stack || e}`;
+      this._body?.replaceChildren(TT.el("div", { class: "tt-empty" }, [
+        TT.el("p", { text: `Dit tabblad kon niet worden opgebouwd: ${e?.message || e}` }),
+        TT.el("div", { class: "tt-row", style: "justify-content:center" }, [
+          TT.el("button", { class: "tt-btn tt-btn-sm", text: "Foutdetails kopiëren", onclick: () => TT.copy(details) }),
+          TT.el("button", { class: "tt-btn tt-btn-sm", text: "Opnieuw proberen", onclick: () => TT.guard(() => this.render(TT), "Overzicht") })
+        ])
+      ]));
+      if (!TT.alive()) TT.meldDood();
+    }
+  },
+  _renderBody(TT) {
     const r = this.analyse(TT);
     const q = this._filter.zoek.trim().toLowerCase();
     const hit = (s) => !q || String(s || "").toLowerCase().includes(q);

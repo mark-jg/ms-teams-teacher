@@ -33,6 +33,7 @@ TT.register({
   applyTheme(TT) { document.documentElement.classList.toggle("tt-dark", TT.dark()); },
 
   toggle(force) {
+    if (!TT.alive()) TT.meldDood();
     const open = force ?? !this._panel.classList.contains("tt-open");
     this._panel.classList.toggle("tt-open", open);
     if (open) { this.refreshStatus(); this._panel.querySelector("button, a")?.focus(); }

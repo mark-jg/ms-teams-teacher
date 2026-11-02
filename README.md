@@ -1,4 +1,4 @@
-# Docent Tools voor Teams (v0.3.3)
+# Docent Tools voor Teams (v0.3.4)
 
 Chrome-extensie voor Microsoft Teams (web) voor docenten: team-overstijgende analyses van opdrachten. Alles draait lokaal in je browser; er wordt niets naar een eigen server gestuurd. Zusje van [Docent Tools voor Magister](https://github.com/mark-jg/magister-docent), met dezelfde opzet.
 
@@ -11,7 +11,7 @@ Chrome-extensie voor Microsoft Teams (web) voor docenten: team-overstijgende ana
 5. Klik op **Uitgepakte extensie laden** en kies de map met `manifest.json`.
 6. Open (of herlaad) Teams in de browser: `https://teams.microsoft.com` of `https://teams.cloud.microsoft`. Rechts verschijnt een handvat "Docent Tools".
 
-Werkt ook in Edge (`edge://extensions`). Bijwerken gaat zoals bij de Magister-extensie: de extensie kijkt om de 6 uur op GitHub of er een nieuwere release is en kan zichzelf bijwerken nadat je één keer de extensiemap hebt aangewezen (Instellingen > Updates).
+Werkt ook in Edge (`edge://extensions`). Na elke update of herlaad van de extensie moet een open Teams-tabblad één keer herladen worden (F5); de extensie meldt dat zelf. Bijwerken gaat zoals bij de Magister-extensie: de extensie kijkt om de 6 uur op GitHub of er een nieuwere release is en kan zichzelf bijwerken nadat je één keer de extensiemap hebt aangewezen (Instellingen > Updates).
 
 ## Wat zit erin
 
@@ -82,6 +82,7 @@ Het zijpaneel toont onder **Koppeling** wat er aan de hand is:
 
 ## Wijzigingen
 
+- 0.3.4: tabwissel en filters werkten niet meer in een Teams-tabblad dat open stond tijdens een update van de extensie (het opslaan van de keuze gooide een fout); dat opslaan blokkeert nu nooit meer, de extensie meldt dat het tabblad herladen moet worden, en een fout in het overzicht wordt getoond met kopieerbare details.
 - 0.3.3: ophalen veel sneller (aanroepen gebundeld per twintig, teams zonder eigenaarschap worden overgeslagen, instelbaar); een tweede klik tijdens het ophalen sluit aan op de lopende ronde in plaats van te blijven hangen op "Verbinden"; voortgang ook in het zijpaneel; melding als opslaan mislukt.
 - 0.3.2: tabwissel is weer vlot (analyse wordt één keer per filtercombinatie berekend, tabellen in porties van 200 rijen); instelling hoeveel schooljaren worden opgehaald (1 tot 4), met bijpassende periodekeuze.
 - 0.3.1: opgehaalde gegevens blijven bruikbaar na een update van de extensie (aanvullen in plaats van opnieuw ophalen); Bijwerken is incrementeel (inleveringen van oude opdrachten worden hergebruikt) en gebeurt op de achtergrond terwijl het overzicht open blijft; automatisch bijwerken na 24 uur, alles opnieuw eens per 7 dagen; onbeperkte lokale opslag.

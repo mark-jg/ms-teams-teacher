@@ -29,7 +29,7 @@
     },
     async saveSettings(patch) {
       settings = deepMerge(settings, patch);
-      await chrome.storage.sync.set({ settings });
+      try { await chrome.storage.sync.set({ settings }); } catch (e) { TT.fout(e, "Instelling opslaan"); }
       listeners.forEach((fn) => fn(settings));
     },
     onSettingsChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
@@ -48,6 +48,27 @@
       }
     },
     module(id) { return modules.get(id); },
+
+    /* Na een update of herlaad van de extensie blijft dit script in een open tabblad draaien, maar
+     * chrome.* werkt dan niet meer ("Extension context invalidated"). Dan moet het tabblad herladen. */
+    alive() { try { return !!chrome.runtime?.id; } catch { return false; } },
+    _doodGemeld: false,
+    meldDood() {
+      if (TT._doodGemeld) return;
+      TT._doodGemeld = true;
+      TT.toast("De extensie is bijgewerkt of herladen. Herlaad dit Teams-tabblad (F5) om Docent Tools weer volledig te gebruiken.", "err", 9000);
+    },
+    /* Voert fn uit en vangt fouten op: melding in beeld en in de console, nooit een stil falende knop. */
+    guard(fn, waar = "") {
+      try { const r = fn(); if (r && typeof r.catch === "function") r.catch((e) => TT.fout(e, waar)); return r; }
+      catch (e) { TT.fout(e, waar); }
+    },
+    fout(e, waar = "") {
+      const msg = String(e?.message || e);
+      console.error(`[Docent Tools] ${waar}`, e);
+      if (/Extension context invalidated|chrome\.runtime|chrome\.storage/i.test(msg) || !TT.alive()) return TT.meldDood();
+      TT.toast(`${waar ? waar + ": " : ""}${msg}`, "err", 6000);
+    },
 
     /* ---------- DOM-helpers ---------- */
     el(tag, attrs = {}, children = []) {
