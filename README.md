@@ -1,4 +1,4 @@
-# Docent Tools voor Teams (v0.1.1)
+# Docent Tools voor Teams (v0.2.0)
 
 Chrome-extensie voor Microsoft Teams (web) voor docenten: team-overstijgende analyses van opdrachten. Alles draait lokaal in je browser; er wordt niets naar een eigen server gestuurd. Zusje van [Docent Tools voor Magister](https://github.com/mark-jg/magister-docent), met dezelfde opzet.
 
@@ -19,7 +19,7 @@ Werkt ook in Edge (`edge://extensions`). Bijwerken gaat zoals bij de Magister-ex
 |---|---|
 | **Opdrachten over alle teams**: per klas, per leerling (over al je klassen heen), per opdracht, komende deadlines, nakijkwerk en signalen | Alt+O, of via het zijpaneel of het extensie-icoon |
 | Export naar Excel: het geopende tabblad of alles in één werkmap (zes bladen, inclusief alle inleveringen) | knoppen bovenin het overzicht |
-| Filters: periode (schooljaar, 90 dagen, 30 dagen, alles), klassen (klik een chip; Alt+klik toont alleen die klas), zoeken | bovenin het overzicht |
+| Filters: klassen (automatisch of zelf gekozen, wordt onthouden), periode (schooljaar, 90 dagen, 30 dagen, alles), "Alleen problemen", zoeken; sorteren door op een kolomkop te klikken | bovenin het overzicht |
 | Zijpaneel met status van de koppeling, modules aan/uit en thema | Alt+K of het handvat |
 | Inspector (ontwikkelaarsmodus): frames, tokens (alleen host en scopes), API-calls van Teams | zijpaneel > Ontwikkelaar |
 
@@ -31,6 +31,12 @@ Per klas en per leerling wordt geteld: toegewezen, ingeleverd (en of dat op tijd
 - **Deadlines** zet de deadlines van al je klassen op één tijdlijn, zodat je ziet waar leerlingen die je in meerdere vakken hebt tegelijk mee te maken krijgen.
 - **Nakijken** laat zien wat er over alle klassen op je ligt te wachten, langst wachtende bovenaan.
 - **Signalen** zijn leerlingen die over alle klassen opgeteld boven een drempel komen (standaard 2× ontbreekt of 3× te laat; instelbaar). De kolom "In klassen" laat zien of het in één vak speelt of breder.
+
+### Welke klassen tellen mee
+
+Standaard bepaalt de extensie dat automatisch met vier signalen uit Graph: is het een **klasteam** (teamtype Klas), is het **gearchiveerd**, ben jij **eigenaar**, en hoort het bij **dit schooljaar** (team aangemaakt sinds juni vóór het schooljaar, of opdrachten met een datum in dit schooljaar). Alleen eigen, actieve klasteams van dit jaar tellen mee; bovenin staat hoeveel er verborgen zijn en waarom. Via **Klassen** kies je zelf (zoekveld, vinkjes, Alles, Niets); die keuze wordt onthouden tot je weer op Automatisch klikt. Gearchiveerde teams worden standaard niet eens opgehaald (instelbaar), en opdrachten van vóór het vorige schooljaar vallen weg.
+
+**Alleen problemen** laat per tabblad alleen rijen zien met ontbrekend werk, te laat of nakijkwerk; de tellingen bovenin veranderen niet mee. Standaardvolgorde: Leerlingen en Signalen op ontbrekend werk, Opdrachten op deadline (nieuwste eerst), Deadlines op datum, Nakijken op wachttijd.
 
 Concept- en ingeplande opdrachten tellen niet mee. Vrijstelling (excused) telt niet als ontbrekend en niet mee in het gemiddelde.
 
@@ -66,5 +72,6 @@ Het zijpaneel toont onder **Koppeling** wat er aan de hand is:
 
 ## Wijzigingen
 
+- 0.2.0: klassen automatisch bepaald (klasteam, niet gearchiveerd, eigenaar, dit schooljaar) met een klassenkiezer die de keuze onthoudt; schakelaar Alleen problemen; betere standaardvolgorde per tabblad; filters en tabblad worden onthouden; gearchiveerde teams en opdrachten van vóór het vorige schooljaar worden niet meer opgehaald.
 - 0.1.1: werkt met het Graph-token van de app Opdrachten (EduAssignments zonder EduRoster): klassen via de teams-lijst, leden via groepsleden; de extensie wacht tot de app Opdrachten open is en kiest het juiste frame op scopes; status in het zijpaneel legt uit wat er mist.
 - 0.1.0: eerste versie. Opdrachten over alle teams (klassen, leerlingen, opdrachten, deadlines, nakijken, signalen) via Microsoft Graph met het token van Teams zelf; Excel-export; zijpaneel met koppelingsstatus; Inspector; zelf bijwerken via GitHub Releases.

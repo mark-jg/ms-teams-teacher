@@ -54,6 +54,8 @@
     <label class="row">Signaal bij ontbrekend werk vanaf <input type="number" min="1" max="50" data-path="opdrachten.drempelOntbreekt" data-type="int"> keer (over alle klassen opgeteld)</label>
     <label class="row">Signaal bij te laat inleveren vanaf <input type="number" min="1" max="50" data-path="opdrachten.drempelTeLaat" data-type="int"> keer</label>
     <label class="row">Opnieuw ophalen na <input type="number" min="1" max="168" data-path="opdrachten.cacheUren" data-type="int"> uur (handmatig vernieuwen kan altijd)</label>
+    <label class="row"><label class="switch"><input type="checkbox" data-path="opdrachten.gearchiveerd"><span></span></label> Ook gearchiveerde teams ophalen (standaard uit; scheelt veel aanroepen)</label>
+    <p>Welke klassen meetellen bepaalt de extensie automatisch: eigen, niet-gearchiveerde klasteams van dit schooljaar (aangemaakt sinds juni, of met opdrachten in dit schooljaar). In het overzicht kun je via "Klassen" zelf kiezen; die keuze wordt onthouden.</p>
     <div class="btns"><button id="wisData">Lokale gegevens wissen</button><span id="dataInfo" style="font-size:13px;color:var(--muted)"></span></div>
   </section>
 
