@@ -212,10 +212,12 @@ TT.register({
   },
 
   /* Klassen afgeleid uit lidmaatschap en teamnaam (zie analyse.js), binnen de geselecteerde teams. */
+  patroon(TT) { return (TT.settings.opdrachten.klascodePatroon || "").trim() || globalThis.TT_KLASCODE || ""; },
   klassen(TT) {
     const sel = this.selectie();
-    const sleutel = JSON.stringify([this._data?.at, sel ? [...sel].sort() : null, TT.settings.opdrachten.klascodePatroon || ""]);
-    if (this._klassen?.sleutel !== sleutel) this._klassen = { sleutel, ...TT_ANALYSE.klassen(this._data, { teams: sel, patroon: TT.settings.opdrachten.klascodePatroon || "" }) };
+    const patroon = this.patroon(TT);
+    const sleutel = JSON.stringify([this._data?.at, sel ? [...sel].sort() : null, patroon]);
+    if (this._klassen?.sleutel !== sleutel) this._klassen = { sleutel, ...TT_ANALYSE.klassen(this._data, { teams: sel, patroon }) };
     return this._klassen;
   },
   /* Analyse wordt één keer per combinatie van gegevens en filters berekend; tabwissels zijn dan gratis. */
@@ -313,7 +315,7 @@ TT.register({
     this._limiet = null;
     const r = this.analyse(TT);
     const K = this.klassen(TT);
-    const views = [["groepen", "Klassen", K.klassen.length], ["klassen", "Teams", r.klassen.length], ["leerlingen", "Leerlingen", r.leerlingen.length], ["opdrachten", "Opdrachten", r.opdrachten.length], ["deadlines", "Deadlines", r.deadlines.length], ["nakijken", "Nakijken", r.nakijken.length], ["signalen", "Signalen", r.signalen.length]];
+    const views = [["groepen", "Klassen", K.klassen.filter((k) => k.leerlingen.length).length], ["klassen", "Teams", r.klassen.length], ["leerlingen", "Leerlingen", r.leerlingen.length], ["opdrachten", "Opdrachten", r.opdrachten.length], ["deadlines", "Deadlines", r.deadlines.length], ["nakijken", "Nakijken", r.nakijken.length], ["signalen", "Signalen", r.signalen.length]];
     const tabs = TT.el("div", { class: "tt-tabs", role: "tablist" }, views.map(([id, l, n]) => TT.el("button", { class: "tt-tab" + (this._view === id ? " is-on" : ""), role: "tab", "aria-selected": String(this._view === id), "data-view": id, onclick: () => TT.guard(() => {
       this._view = id; this._limiet = null;
       for (const b of tabs.querySelectorAll(".tt-tab")) { const on = b.dataset.view === id; b.classList.toggle("is-on", on); b.setAttribute("aria-selected", String(on)); }
@@ -326,7 +328,8 @@ TT.register({
     const sel = this.selectie(), totaal = this._data.classes.length, nSel = sel ? sel.size : totaal;
     const kiezer = TT.el("button", { class: "tt-btn", id: "tt-kiezer-knop", "aria-haspopup": "dialog", text: `Klassen: ${nSel} van ${totaal} ▾`, onclick: (e) => TT.guard(() => this.kiezer(TT, e.currentTarget), "Klassenkiezer") });
     if (this._filter.klas && !K.klassen.some((k) => k.naam === this._filter.klas)) this._filter.klas = null;
-    const klasSel = TT.el("select", { class: "tt-select", "aria-label": "Klas", onchange: (e) => TT.guard(() => { this._filter.klas = e.target.value || null; this.render(TT); this.saveFilter(); }, "Klasfilter") }, [TT.el("option", { value: "", text: "Alle klassen" }), ...K.klassen.map((k) => TT.el("option", { value: k.naam, text: `${k.naam} (${k.leerlingen.length})` }))]);
+    const metLeerlingen = K.klassen.filter((k) => k.leerlingen.length);
+    const klasSel = TT.el("select", { class: "tt-select", "aria-label": "Klas", onchange: (e) => TT.guard(() => { this._filter.klas = e.target.value || null; this.render(TT); this.saveFilter(); }, "Klasfilter") }, [TT.el("option", { value: "", text: `Alle klassen (${metLeerlingen.length})` }), ...metLeerlingen.map((k) => TT.el("option", { value: k.naam, text: `${k.naam} (${k.leerlingen.length})` }))]);
     klasSel.value = this._filter.klas || "";
     const prob = TT.el("button", { class: "tt-chip tt-chip-btn" + (this._filter.problemen ? "" : " is-off"), "aria-pressed": String(this._filter.problemen), title: "Alleen rijen met ontbrekend werk, te laat of nakijkwerk", text: "Alleen problemen", onclick: () => TT.guard(() => { this._filter.problemen = !this._filter.problemen; this.render(TT); this.saveFilter(); }, "Alleen problemen") });
     const verborgen = this._filter.auto && sel ? this._data.classes.filter((c) => !sel.has(c.id)) : [];
@@ -418,8 +421,8 @@ TT.register({
     const cards = (items) => TT.el("div", { class: "tt-cards" }, items.map(([l, v, sub]) => TT.el("div", { class: "tt-card" }, [TT.el("b", { text: String(v) }), TT.el("small", { text: l }), sub ? TT.el("span", { class: "tt-sub", text: sub }) : null])));
     let out;
     if (this._view === "groepen") {
-      const rows = this.klasOverzicht(TT, r).filter((k) => (!KL || k.naam === KL) && (hit(k.naam) || k.teams.some(hit)) && (!P_ || k.ontbreekt > 0 || k.nakijken > 0));
-      out = [TT.el("p", { class: "tt-muted", text: `Klassen afgeleid uit wie samen in dezelfde teams zit${TT.settings.opdrachten.klascodePatroon ? " en uit de klascode in de teamnaam" : ""}; elke leerling hoort bij de klas waarvan die de meeste teams volgt. Klik op een rij voor de klaslijst. Klopt een indeling niet, dan helpt een klascodepatroon in de instellingen.` }),
+      const rows = this.klasOverzicht(TT, r).filter((k) => k.leerlingen > 0 && (!KL || k.naam === KL) && (hit(k.naam) || k.teams.some(hit)) && (!P_ || k.ontbreekt > 0 || k.nakijken > 0));
+      out = [TT.el("p", { class: "tt-muted", text: "Klassen uit de klascode vóór het streepje in de teamnaam, aangevuld met wie samen in dezelfde teams zit; elke leerling hoort bij de klas waarvan die de meeste teams volgt. Klik op een rij voor de klaslijst. Het patroon voor de klascode staat in de instellingen." }),
         this.table(TT, "groepen", [
           { k: "naam", l: "Klas", cls: "tt-name", f: (x) => [x.naam, TT.el("span", { class: "tt-sub", text: x.teams.join(" · ") })] },
           { k: "leerlingen", l: "Leerl.", n: 1 }, { k: "aantalTeams", l: "Teams", n: 1 }, { k: "toegewezen", l: "Toegew.", n: 1 },

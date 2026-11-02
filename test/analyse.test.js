@@ -127,4 +127,27 @@ assert.equal(new Date(van2).getFullYear(), 2025);
 assert.equal(A.bouw(data, { periode: "sj2", nu }).totaal.opdrachten, 3);
 assert.equal(new Date(A.periodeBereik("sj3", nu)[0]).getFullYear(), 2024);
 
+// Naamgeving met klascode vóór het streepje (team per vak), zoals op het Mediacollege.
+const PAT = "^\\s*([A-Za-z]{1,8}\\d{2,4}[A-Za-z]{0,2})\\s*(?:[-–:]|$)";
+const mc = {
+  classes: [
+    { id: "a", displayName: "MIP26A - Burgerschap" }, { id: "b", displayName: "MIP26A - Rekenen" }, { id: "c", displayName: "MIP26A" },
+    { id: "d", displayName: "MIP26B - Burgerschap" }, { id: "e", displayName: "MIP26B" },
+    { id: "f", displayName: "KD25 - Creatief Ondernemerschap" }, { id: "g", displayName: "KD - Verdieping Beeldgebruik" },
+    { id: "h", displayName: "MEPMR25 - KD Basis Fotografie" }
+  ],
+  members: {
+    a: [], // nog geen leden bekend: hoort toch bij MIP26A via de code
+    b: ["p", "q", "r", "s"].map((x) => ({ id: x, displayName: x })), c: ["p", "q", "r", "s", "t"].map((x) => ({ id: x, displayName: x })),
+    d: ["u", "v", "w"].map((x) => ({ id: x, displayName: x })), e: ["u", "v", "w", "x"].map((x) => ({ id: x, displayName: x })),
+    f: ["k", "l", "m", "n"].map((x) => ({ id: x, displayName: x })), g: ["k", "l", "m"].map((x) => ({ id: x, displayName: x })), // geen code, sluit via overlap aan bij KD25
+    h: ["p", "u", "k"].map((x) => ({ id: x, displayName: x }))
+  }, assignments: [], submissions: {}, namen: {}
+};
+const M = A.klassen(mc, { patroon: PAT });
+assert.deepEqual(M.klassen.map((k) => [k.naam, k.teams.length, k.leerlingen.length]), [["KD25", 2, 4], ["MEPMR25", 1, 0], ["MIP26A", 3, 5], ["MIP26B", 2, 4]]);
+assert.equal(M.teamKlas.a, "MIP26A");
+assert.equal(M.teamKlas.g, "KD25");
+assert.equal(M.klasVan.p, "MIP26A");
+
 console.log("analyse.test.js: alles in orde");

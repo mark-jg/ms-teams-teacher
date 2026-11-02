@@ -167,13 +167,20 @@
     // 1. Zelfde klascode in de naam → zelfde klas.
     const perCode = new Map();
     for (const t of teams) { const c = code(t); if (c) { if (perCode.has(c)) voeg(t.id, perCode.get(c)); else perCode.set(c, t.id); } }
-    // 2. Overlap in lidmaatschap (alleen teams zonder herkende code, of als er geen patroon is).
-    const los = teams.filter((t) => !code(t));
-    for (let i = 0; i < los.length; i++) for (let j = i + 1; j < los.length; j++) {
-      const A = leden.get(los[i].id), B = leden.get(los[j].id);
-      if (!A.size || !B.size) continue;
-      let n = 0; for (const x of A) if (B.has(x)) n++;
-      if (n >= minL && n / Math.min(A.size, B.size) >= drempel) voeg(los[i].id, los[j].id);
+    // 2. Overlap in lidmaatschap: een team zonder herkende code sluit aan bij het team (met of zonder code)
+    //    waarmee het de meeste leerlingen deelt, als dat genoeg is.
+    const overlap = (A, B) => { let n = 0; for (const x of A) if (B.has(x)) n++; return n; };
+    for (const t of teams) {
+      if (code(t)) continue;
+      const A = leden.get(t.id); if (!A.size) continue;
+      let best = null, bestN = 0;
+      for (const u of teams) {
+        if (u === t) continue;
+        const B = leden.get(u.id); if (!B.size) continue;
+        const n = overlap(A, B);
+        if (n >= minL && n / Math.min(A.size, B.size) >= drempel && n > bestN) { best = u; bestN = n; }
+      }
+      if (best) voeg(t.id, best.id);
     }
     // Groepen samenstellen.
     const groepen = new Map();
@@ -181,11 +188,13 @@
     const STOP = /^(team|klas|class|groep|vak|les|en|de|het|van|\d{4}|\d{2}-\d{2}|\d{4}-\d{4}|\d{4}-\d{2})$/i;
     const tokens = (n) => String(n || "").split(/[^\p{L}\p{N}]+/u).filter((x) => x.length >= 2 && !STOP.test(x));
     const benoem = (ts) => {
-      const c = code(ts[0]); if (c && ts.every((t) => code(t) === c)) return c;
+      // Heeft een team in de groep een klascode, dan is de meest voorkomende code de naam.
+      const tel = new Map(); for (const t of ts) { const c = code(t); if (c) tel.set(c, (tel.get(c) || 0) + 1); }
+      if (tel.size) return [...tel.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0];
       if (ts.length === 1) return ts[0].displayName;
-      const tel = new Map();
-      for (const t of ts) for (const x of new Set(tokens(t.displayName).map((y) => y.toUpperCase()))) tel.set(x, (tel.get(x) || 0) + 1);
-      const gemeen = [...tel.entries()].filter(([, n]) => n >= Math.max(2, Math.ceil(ts.length * 0.6))).map(([x]) => x);
+      const telW = new Map();
+      for (const t of ts) for (const x of new Set(tokens(t.displayName).map((y) => y.toUpperCase()))) telW.set(x, (telW.get(x) || 0) + 1);
+      const gemeen = [...telW.entries()].filter(([, n]) => n >= Math.max(2, Math.ceil(ts.length * 0.6))).map(([x]) => x);
       const metCijfer = gemeen.filter((x) => /\d/.test(x));
       const keus = (metCijfer.length ? metCijfer : gemeen).sort((a, b) => a.length - b.length || a.localeCompare(b))[0];
       return keus || ts.map((t) => t.displayName).sort()[0];
