@@ -890,12 +890,14 @@ TT.register({
           { k: "nakijken", l: "Na te kijken", n: 1, f: (k) => ({ v: k.nakijken, text: k.nakijken ? String(k.nakijken) : "", cls: k.nakijken ? "tt-warnc" : "" }) },
           { k: "laatste", l: "Laatste activiteit", f: (k) => U.D(k.laatste) }
         ], vakRijen, vakDetail, { k: "vak", asc: true });
-        const rub = this.rubrics(TT).rijen.filter((x) => x.gedeeld).map((rij) => ({ rij, n: TT_ANALYSE.rijNiveaus(this.zichtbareData(), rij, { klasVan: K.klasVan }).find((x) => x.id === l.id) })).filter((x) => x.n);
+        const gedeeldeSleutels = new Set(this.rubrics(TT).rijen.filter((x) => x.gedeeld).map((x) => x.sleutel));
+        const LR = TT_ANALYSE.leerlingRubrics(this.zichtbareData(), l.id, { periode: this._filter.periode, klassen: this.selectie(), gedeeldeSleutels });
         out = [U.kruimels([start, l.klas ? { l: l.klas, p: { type: "klas", id: l.klas } } : null, { l: l.naam }].filter(Boolean)),
           U.kop(l.naam, [l.klas, nr ? "studentnummer " + nr : "", `${l.aantalKlassen} vakken`].filter(Boolean).join(" · "), [U.gemChip(c?.totaal ?? null), ...U.chips(l), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Rapport", onclick: () => TT.guard(() => this.rapportDialoog(TT, l.klas), "Rapport") }), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Verbergen", title: "Deze leerling uit het overzicht halen", onclick: () => TT.guard(() => { this.verberg(TT, "leerlingen", l.id, l.naam); this.terug(TT); }, "Verbergen") })]),
           sig ? TT.el("div", { class: "tt-signaal" }, [TT.el("b", { text: "Signaal: " }), `${sig.redenen.join(", ")}${sig.klassenMetProbleem.length ? " · in " + sig.klassenMetProbleem.map((x) => this.vakVan(TT, x)).join(", ") : ""}`]) : null,
           U.sectie("Per vak", vakTabel, "Klik op een kolomkop om te sorteren, op een rij voor de opdrachten en categorieën."),
-          rub.length ? U.sectie("Rubric-rijen over vakken heen", TT.el("div", { class: "tt-lijst" }, rub.map(({ rij, n }) => U.rij(rij.tekst, n.beoordelingen.map((b) => `${this.vakVan(TT, b.klas)}: ${b.niveau}`).join(" · "), [n.gemiddeld != null ? U.chip(`gem. ${U.P(n.gemiddeld)}`, n.gemiddeld < 0.5 ? "bad" : "ok") : null].filter(Boolean), () => this.ga(TT, { type: "rubrics" }))))) : null
+          LR.gedeeld.length ? U.sectie("Rubrics over vakken heen", TT.el("div", { class: "tt-rubrics" }, LR.gedeeld.map((rij) => this.rubricRijRaster(TT, rij))), "Per gedeelde rij alle niveaus (stappen) met de omschrijving, en per vak of opdracht het gekozen niveau.") : null,
+          LR.perOpdracht.length ? U.sectie("Rubrics per opdracht", TT.el("div", { class: "tt-lijst" }, LR.perOpdracht.map((o) => this.rubricOpdrachtRaster(TT, o))), "Klik op een opdracht voor het hele raster: alle rijen, alle niveaus, de gekozen cel en de punten.") : null
         ];
       }
     } else if (pg.type === "nakijken") {
@@ -917,6 +919,51 @@ TT.register({
     this._body.replaceChildren(...out.filter(Boolean));
   },
 
+  /* Raster van één gedeelde rij voor één leerling: kolommen = niveaus, rij 1 = omschrijving, daarna per
+   * opdracht een stip op het gekozen niveau. Groepen met andere niveaunamen krijgen elk een eigen raster. */
+  rubricRijRaster(TT, rij) {
+    const U = this.ui(TT);
+    const kop = TT.el("div", { class: "tt-rubric-kop" }, [
+      TT.el("div", {}, [TT.el("b", { text: rij.tekst }), TT.el("small", { class: "tt-muted", text: ` · ${rij.aantalVakken} ${rij.aantalVakken === 1 ? "vak" : "vakken"} · ${rij.beoordeeld} van ${rij.voorkomens.length} beoordeeld` })]),
+      rij.gemiddeld != null ? U.chip(`gem. ${U.P(rij.gemiddeld)}`, rij.gemiddeld < 0.5 ? "bad" : rij.gemiddeld < 0.7 ? "warn" : "ok") : null
+    ]);
+    const rasters = rij.groepen.map((g) => {
+      const n = g.niveaus.length;
+      const tabel = TT.el("table", { class: "tt-raster" }, [
+        TT.el("thead", {}, TT.el("tr", {}, [TT.el("th", { text: "" }), ...g.niveaus.map((niv) => TT.el("th", {}, [TT.el("b", { text: niv.naam || "niveau" }), niv.punten != null ? TT.el("small", { text: `${niv.punten} pt` }) : null]))])),
+        TT.el("tbody", {}, [
+          g.criteria.some(Boolean) ? TT.el("tr", { class: "tt-raster-criteria" }, [TT.el("td", { text: "Omschrijving" }), ...g.criteria.slice(0, n).map((c) => TT.el("td", { text: c || "" }))]) : null,
+          ...g.voorkomens.map((v) => TT.el("tr", { class: "is-klik", onclick: () => this.ga(TT, { type: "team", id: v.classId }) }, [
+            TT.el("td", { class: "tt-raster-label" }, [TT.el("b", { text: this.vakVan(TT, v.klas) }), TT.el("small", { text: `${v.opdracht}${v.due ? " · " + U.D(v.due) : ""}` })]),
+            ...g.niveaus.map((niv, j) => TT.el("td", { class: "tt-raster-cel" + (v.index === j ? " is-gekozen" + (v.pct != null && v.pct < 0.5 ? " is-laag" : "") : "") + (v.index == null ? " is-leeg" : "") }, v.index === j ? TT.el("span", { class: "tt-stip", title: `${niv.naam}${niv.punten != null ? " · " + niv.punten + " punten" : ""}` }) : null))
+          ]))
+        ].filter(Boolean))
+      ]);
+      return TT.el("div", { class: "tt-raster-wrap" }, tabel);
+    });
+    return TT.el("div", { class: "tt-rubric" }, [kop, ...rasters]);
+  },
+  /* Volledig raster van één opdracht voor één leerling (ingeklapt tot je klikt). */
+  rubricOpdrachtRaster(TT, o) {
+    const U = this.ui(TT);
+    const key = "rbo:" + o.aid;
+    const chips = [o.beoordeeld ? U.chip(`${o.beoordeeld} van ${o.rijen.length} rijen beoordeeld`, o.beoordeeld === o.rijen.length ? "ok" : "warn") : U.chip("nog niet beoordeeld", ""), o.totaalPunten != null ? U.chip(`${o.totaalPunten} / ${o.maxPunten} pt`, o.maxPunten && o.totaalPunten / o.maxPunten < 0.5 ? "bad" : "") : null, o.gemiddeld != null ? U.chip(`gem. ${U.P(o.gemiddeld)}`, o.gemiddeld < 0.5 ? "bad" : o.gemiddeld < 0.7 ? "warn" : "ok") : null].filter(Boolean);
+    const knop = U.rij(o.opdracht, `${this.vakVan(TT, o.klas)} · ${o.rubric || "rubric"}${o.due ? " · " + U.D(o.due) : ""} · ${o.rijen.length} rijen, ${o.niveaus.length} niveaus`, chips, () => { this._open.has(key) ? this._open.delete(key) : this._open.add(key); this.renderBody(TT); });
+    if (!this._open.has(key)) return knop;
+    const tabel = TT.el("table", { class: "tt-raster tt-raster-vol" }, [
+      TT.el("thead", {}, TT.el("tr", {}, [TT.el("th", { text: "Rij" }), ...o.niveaus.map((niv) => TT.el("th", {}, [TT.el("b", { text: niv.naam || "niveau" }), niv.punten != null ? TT.el("small", { text: `${niv.punten} pt` }) : null, niv.beschrijving ? TT.el("small", { class: "tt-muted", text: niv.beschrijving }) : null])), TT.el("th", { class: "tt-num", text: "Punten" })])),
+      TT.el("tbody", {}, o.rijen.map((r) => TT.el("tr", {}, [
+        TT.el("td", { class: "tt-raster-label" }, [TT.el("b", { text: r.tekst }), r.gewicht != null ? TT.el("small", { text: `weging ${r.gewicht}%` }) : null]),
+        ...o.niveaus.map((niv, j) => TT.el("td", { class: "tt-raster-cel tt-raster-tekst" + (r.index === j ? " is-gekozen" + (r.pct != null && r.pct < 0.5 ? " is-laag" : "") : "") }, [r.index === j ? TT.el("span", { class: "tt-stip" }) : null, TT.el("span", { text: r.criteria[j] || "" })])),
+        TT.el("td", { class: "tt-num", text: r.punten != null ? String(r.punten) : r.index == null ? "–" : "" })
+      ])))
+    ]);
+    return TT.el("div", {}, [knop, TT.el("div", { class: "tt-detail" }, [
+      TT.el("div", { class: "tt-row", style: "margin-bottom:6px" }, [o.webUrl ? TT.el("a", { class: "tt-btn tt-btn-sm", href: o.webUrl, target: "_blank", rel: "noopener", text: "Openen in Teams" }) : null, TT.el("button", { class: "tt-btn tt-btn-sm", text: "Naar het vak", onclick: () => this.ga(TT, { type: "team", id: o.classId }) })]),
+      TT.el("div", { class: "tt-raster-wrap" }, tabel),
+      o.totaalPunten != null ? TT.el("div", { class: "tt-muted", style: "margin-top:6px", text: `Totaal ${o.totaalPunten} van ${o.maxPunten} punten` }) : null
+    ])]);
+  },
   rubricDetail(TT, rij) {
     const P = TT.pct, D = TT.fmtDate;
     const N = TT_ANALYSE.rijNiveaus(this.zichtbareData(), rij, { klasVan: this.klassen(TT).klasVan });

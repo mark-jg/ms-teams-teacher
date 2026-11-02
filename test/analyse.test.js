@@ -246,4 +246,19 @@ assert.deepEqual(R3.leerlingen.find((l) => l.id === "u1").periodeNamen, ["Period
 assert.deepEqual(R3.leerlingen.find((l) => l.id === "u2").periodeNamen, ["Periode 2.1", "Periode 2.2"]);
 assert.equal(R3.leerlingen.find((l) => l.id === "u1").vakken.find((v) => v.vak === "Tekst").periodes[1].cijfer, 5.5);
 
+// Rubrics van één leerling: raster per opdracht en gedeelde rij "Samenwerken" over twee vakken.
+const rd2 = { ...rd, rubrics: { ...rd.rubrics, a1: { ...rd.rubrics.a1, rijen: [{ id: "q1", tekst: "Samenwerken", gewicht: null, criteria: [{ id: "c1", tekst: "Werkt niet samen" }, { id: "c2", tekst: "Werkt soms samen" }, { id: "c3", tekst: "Werkt goed samen" }] }, { id: "q2", tekst: "Spelling", gewicht: null, criteria: [] }] } } };
+const LR = A.leerlingRubrics(rd2, "u1", { periode: "schooljaar", nu });
+assert.equal(LR.perOpdracht.length, 2);
+const eng = LR.perOpdracht.find((o) => o.aid === "a1");
+assert.equal(eng.rubric, "Rubric Engels");
+assert.deepEqual(eng.rijen.map((r) => [r.tekst, r.index, r.niveau, r.punten]), [["Samenwerken", 2, "Goed", 4], ["Spelling", 0, "Onvoldoende", 1]]);
+assert.deepEqual(eng.rijen[0].criteria, ["Werkt niet samen", "Werkt soms samen", "Werkt goed samen"]);
+assert.equal(eng.totaalPunten, 5); assert.equal(eng.maxPunten, 8);
+assert.equal(LR.gedeeld.length, 1);
+assert.equal(LR.gedeeld[0].tekst, "Samenwerken");
+assert.equal(LR.gedeeld[0].groepen.length, 1);                      // zelfde niveaunamen → één raster
+assert.deepEqual(LR.gedeeld[0].groepen[0].voorkomens.map((v) => [v.klas, v.index]), [["MIP26A - Rekenen", 1], ["MIP26A - Engels", 2]]);
+assert.equal(LR.gedeeld[0].gemiddeld, 0.75);
+
 console.log("analyse.test.js: alles in orde");

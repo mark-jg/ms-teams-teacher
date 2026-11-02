@@ -338,6 +338,52 @@
     return { klassen: uit, klasVan, teamKlas };
   }
 
+  /* ---------- Rubrics van één leerling ----------
+   * gedeeld: per gedeelde rij (zelfde tekst in meerdere opdrachten of vakken) een raster: kolommen = niveaus
+   *   (stappen), rijen = de opdrachten waarin de leerling op die rij is beoordeeld, met het gekozen niveau.
+   *   Opdrachten met andere niveaunamen vormen een eigen groep.
+   * perOpdracht: per opdracht met rubric het hele raster (alle rijen × niveaus, criteriumtekst per cel) met
+   *   per rij het gekozen niveau en de punten, plus het totaal. */
+  function leerlingRubrics(data, uid, opties = {}) {
+    const klassen = new Map((data.classes || []).map((c) => [c.id, c]));
+    const perOpdracht = [];
+    for (const a of actieveOpdrachten(data, opties)) {
+      const rb = data.rubrics?.[a.id]; if (!rb) continue;
+      const sub = (data.submissions?.[a.id] || []).find((x) => x.recipient?.userId === uid); if (!sub) continue;
+      const uitkomst = (sub.outcomes || []).find((o) => /rubricOutcome/i.test(o["@odata.type"] || ""));
+      const gekozen = new Map((uitkomst?.niveaus || []).map((x) => [x.qualityId, x.columnId]));
+      const maxP = Math.max(...rb.niveaus.map((n) => n.punten ?? -Infinity)); const metPunten = isFinite(maxP) && maxP > 0;
+      const rijen = rb.rijen.map((q) => {
+        const idx = rb.niveaus.findIndex((n) => n.id === gekozen.get(q.id));
+        const niv = idx >= 0 ? rb.niveaus[idx] : null;
+        return { id: q.id, tekst: q.tekst, gewicht: q.gewicht, criteria: rb.niveaus.map((n, j) => q.criteria?.[j]?.tekst || ""), index: idx >= 0 ? idx : null, niveau: niv?.naam || null, punten: niv?.punten ?? null, pct: niv ? (metPunten ? (niv.punten ?? 0) / maxP : rb.niveaus.length > 1 ? idx / (rb.niveaus.length - 1) : null) : null };
+      });
+      const beoordeeld = rijen.filter((r) => r.index != null);
+      perOpdracht.push({ aid: a.id, classId: a.classId, klas: klassen.get(a.classId)?.displayName || a.classId, opdracht: a.displayName, due: ts(a.dueDateTime), webUrl: a.webUrl || "", rubric: rb.naam || "", niveaus: rb.niveaus.map((n) => ({ id: n.id, naam: n.naam, beschrijving: n.beschrijving || "", punten: n.punten })), rijen,
+        beoordeeld: beoordeeld.length, totaalPunten: metPunten ? beoordeeld.reduce((x, r) => x + (r.punten || 0), 0) : null, maxPunten: metPunten ? rb.rijen.length * maxP : null, gemiddeld: gem(beoordeeld.map((r) => r.pct).filter((x) => x != null)) });
+    }
+    perOpdracht.sort((a, b) => (b.due || 0) - (a.due || 0));
+    // Gedeelde rijen: per tekst de voorkomens van deze leerling, gegroepeerd op niveaunamen.
+    const perTekst = new Map();
+    for (const o of perOpdracht) for (const r of o.rijen) {
+      const key = normTekst(r.tekst); if (!key) continue;
+      if (!perTekst.has(key)) perTekst.set(key, { sleutel: key, tekst: r.tekst, voorkomens: [] });
+      perTekst.get(key).voorkomens.push({ aid: o.aid, classId: o.classId, klas: o.klas, opdracht: o.opdracht, due: o.due, niveaus: o.niveaus, criteria: r.criteria, index: r.index, niveau: r.niveau, punten: r.punten, pct: r.pct });
+    }
+    const alleGedeeld = opties.gedeeldeSleutels || null; // sleutels van rijen die in de hele dataset gedeeld zijn
+    // Mooiste schrijfwijze als titel: met hoofdletter en zonder leesteken aan het eind.
+    const netjes = (t) => /^[A-ZÀ-Ý]/.test(t) && !/[.,;:!?]$/.test(t);
+    const gedeeld = [...perTekst.values()].filter((r) => r.voorkomens.length > 1 || (alleGedeeld && alleGedeeld.has(r.sleutel))).map((r) => {
+      const teksten = r.voorkomens.map((v) => (perOpdracht.find((o) => o.aid === v.aid)?.rijen.find((x) => normTekst(x.tekst) === r.sleutel) || {}).tekst).filter(Boolean);
+      r.tekst = teksten.find(netjes) || teksten[0] || r.tekst;
+      const groepen = new Map();
+      for (const v of r.voorkomens) { const sig = v.niveaus.map((n) => normTekst(n.naam)).join("|"); if (!groepen.has(sig)) groepen.set(sig, { niveaus: v.niveaus, criteria: v.criteria, voorkomens: [] }); groepen.get(sig).voorkomens.push(v); }
+      const vakken = [...new Set(r.voorkomens.map((v) => v.klas))];
+      return { ...r, groepen: [...groepen.values()], aantalVakken: vakken.length, gemiddeld: gem(r.voorkomens.map((v) => v.pct).filter((x) => x != null)), beoordeeld: r.voorkomens.filter((v) => v.index != null).length };
+    }).sort((a, b) => b.aantalVakken - a.aantalVakken || b.voorkomens.length - a.voorkomens.length || a.tekst.localeCompare(b.tekst, "nl"));
+    return { gedeeld, perOpdracht };
+  }
+
   /* ---------- Rapport per leerling ----------
    * opties: { periodes: [{ naam, begin: "JJJJ-MM-DD", einde }], klasVan, teamKlas, klassen (Set van teamIds),
    *   patroon (klascode-regex), opleidingen: { MR: "Mediaredactiemedewerker" }, vakgroepen: [{ naam, vakken: [] }],
@@ -413,7 +459,7 @@
     return { periodes: periodes.map((p) => p.naam), periodeKolommen: periodes.map((p) => String(p.naam).replace(/\{jaar\}\.?/g, "").trim()), leerlingen };
   }
 
-  const API = { bouw, beoordeel, periodeBereik, naarTabellen, klassen, cijfers, rubrics, rijNiveaus, actieveOpdrachten, rapport, naarCijfer, teamGemiddelde };
+  const API = { bouw, beoordeel, periodeBereik, naarTabellen, klassen, cijfers, rubrics, rijNiveaus, leerlingRubrics, actieveOpdrachten, rapport, naarCijfer, teamGemiddelde };
   globalThis.TT_ANALYSE = API;
   if (typeof module !== "undefined" && module.exports) module.exports = API;
 })();

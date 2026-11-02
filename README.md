@@ -1,4 +1,4 @@
-# Docent Tools voor Teams (v0.6.3)
+# Docent Tools voor Teams (v0.7.0)
 
 Chrome-extensie voor Microsoft Teams (web) voor docenten: team-overstijgende analyses van opdrachten. Alles draait lokaal in je browser; er wordt niets naar een eigen server gestuurd. Zusje van [Docent Tools voor Magister](https://github.com/mark-jg/magister-docent), met dezelfde opzet.
 
@@ -20,7 +20,7 @@ Werkt ook in Edge (`edge://extensions`). Na elke update of herlaad van de extens
 | **Overzicht met doorklikken** (Alt+O): start met je werk (na te kijken, deadlines, signalen) en je klassen; klik door naar een klas, een vak (team) of een leerling | Alt+O, zijpaneel of extensie-icoon |
 | **Klas**: leerlingen en vakken van die klas, komende deadlines | klik op een klas |
 | **Vak (team)**: opdrachten met inleverstand, klik op een opdracht voor de stand per leerling; leerlingen van dat vak | klik op een vak |
-| **Leerling**: per vak het (gewogen) gemiddelde, ontbrekend en te laat werk, de opdrachten, gedeelde rubric-rijen, signaal | klik op een leerling of zoek de naam |
+| **Leerling**: per vak het (gewogen) gemiddelde, ontbrekend en te laat werk, de opdrachten; rubrics over vakken heen als raster (alle niveaus met omschrijving, per vak het gekozen niveau) en per opdracht het volledige rubricraster met gekozen cellen en punten; signaal | klik op een leerling of zoek de naam |
 | **Rapporten**: per leerling een A4-rapport met cijfers per vak per periode, studentnummer, klas, opleiding, cohort en leerjaar; thema Zwart/magenta (huisstijl Mediacollege Amsterdam) of een algemeen thema; opmerkingen typ je in het rapport | knop Rapporten, ook per klas en per leerling |
 | **Rubrics**: rubric-rijen die in meerdere opdrachten of vakken voorkomen, met per leerling het gekozen niveau | via het startscherm of een leerling |
 | **Verbergen**: het kruisje op een rij of kaart geeft twee keuzes. "Alleen in deze lijst verbergen" haalt het item uit die ene lijst en laat het overal meetellen; "Verbergen en niet meetellen" haalt het uit het hele overzicht, de startkaarten en de rapporten. Terugzetten via de knop Verborgen, per soort en per lijst | kruisje bij aanwijzen; knop Verborgen bovenin |
@@ -105,6 +105,7 @@ Het zijpaneel toont onder **Koppeling** wat er aan de hand is:
 
 ## Wijzigingen
 
+- 0.7.0: rubrics per leerling als raster: per gedeelde rij alle niveaus (stappen) met omschrijving en per vak of opdracht een stip op het gekozen niveau; per opdracht het volledige raster met alle rijen, de gekozen cellen, punten en totaal.
 - 0.6.3: twee soorten verbergen: alleen in deze lijst (telt overal mee) of overal en niet meetellen; het kruisje opent een keuzemenu en de beheerlijst toont beide soorten apart.
 - 0.6.2: verbergen van leerlingen, klassen, vakken en opdrachten via een kruisje op rijen en kaarten; verborgen items tellen nergens mee (ook niet in startkaarten en rapporten) en zijn terug te zetten via de knop Verborgen; de lijst blijft bewaard.
 - 0.6.1: elke lijst heeft een sorteerbalk (naam, activiteit, gemiddelde, ontbreekt, te laat; bij opdrachten ook deadline, bij nakijken wachttijd), de keuze wordt per lijst onthouden; de leerlingpagina toont de vakken als sorteerbare tabel in plaats van tegels, met per rij de opdrachten en categorieën.
