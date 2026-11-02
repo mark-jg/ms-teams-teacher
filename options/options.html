@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Docent Tools voor Teams: instellingen</title>
+<style>
+  :root { --accent:#5B5FC7; --gold:#E8B84A; --fg:#1a1d21; --muted:#6b7280; --line:#e2e5ea; --bg:#fff; }
+  @media (prefers-color-scheme: dark) { :root { --fg:#e8eaee; --muted:#9aa3b2; --line:#2b313b; --bg:#161a20; } }
+  body { margin:0; font:15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; color:var(--fg); background:var(--bg); }
+  main { max-width:720px; margin:0 auto; padding:32px 24px 60px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 28px; }
+  section { padding:20px 0; border-top:1px solid var(--line); }
+  section h2 { font-size:16px; margin:0 0 4px; display:flex; align-items:center; justify-content:space-between; }
+  section p { margin:0 0 12px; color:var(--muted); font-size:14px; }
+  label.row { display:flex; align-items:center; gap:10px; margin:8px 0; }
+  input[type=text], input[type=number], input[type=password], select { font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:7px; background:var(--bg); color:var(--fg); }
+  input[type=number] { width:90px; }
+  .switch { position:relative; width:42px; height:24px; }
+  .switch input { opacity:0; width:0; height:0; }
+  .switch span { position:absolute; inset:0; background:#c3c9d3; border-radius:24px; transition:.15s; }
+  .switch span::before { content:""; position:absolute; width:18px; height:18px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.15s; }
+  .switch input:checked + span { background:var(--accent); }
+  .switch input:checked + span::before { transform:translateX(18px); }
+  .switch input:focus-visible + span { outline:2px solid var(--gold); }
+  button { font:inherit; padding:7px 12px; border:1px solid var(--line); border-radius:7px; background:var(--bg); color:var(--fg); cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button[disabled] { opacity:.5; cursor:default; }
+  .status { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--fg); color:var(--bg); padding:8px 14px; border-radius:8px; opacity:0; transition:.2s; }
+  .status.show { opacity:1; }
+  kbd { font:12px ui-monospace, monospace; border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
+  .btns { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  #updateProgress, #updateStatus { font-size:13px; color:var(--muted); margin:8px 0 0; }
+  .dev-only[hidden] { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Docent Tools voor Teams</h1>
+  <p class="sub">Alles wordt lokaal in je browser bewaard. Wijzigingen zijn direct zichtbaar in open Teams-tabbladen.</p>
+
+  <section>
+    <h2>Zijpaneel <label class="switch"><input type="checkbox" data-path="panel.enabled"><span></span></label></h2>
+    <p><kbd>Alt</kbd>+<kbd>K</kbd> opent en sluit het paneel; <kbd>Alt</kbd>+<kbd>O</kbd> opent het opdrachtenoverzicht.</p>
+    <label class="row">Positie <select data-path="panel.position"><option value="right">Rechts</option><option value="left">Links</option></select></label>
+    <label class="row"><label class="switch"><input type="checkbox" data-path="panel.handle"><span></span></label> Tab "Docent Tools" aan de rand van Teams tonen</label>
+    <label class="row">Thema van de tools <select data-path="thema"><option value="auto">Volg systeem</option><option value="licht">Licht</option><option value="donker">Donker</option></select></label>
+  </section>
+
+  <section>
+    <h2>Opdrachten over alle teams <label class="switch"><input type="checkbox" data-path="opdrachten.enabled"><span></span></label></h2>
+    <p>Klassen, opdrachten, inleveringen en cijfers via Microsoft Graph, met het token dat Teams zelf al heeft. De opgehaalde gegevens blijven in de lokale opslag van de extensie, zodat het overzicht de volgende keer direct opent.</p>
+    <label class="row">Standaardperiode <select data-path="opdrachten.periode"><option value="schooljaar">Dit schooljaar (1 aug – 31 jul)</option><option value="90">Laatste 90 dagen</option><option value="30">Laatste 30 dagen</option><option value="alles">Alles</option></select></label>
+    <label class="row">Signaal bij ontbrekend werk vanaf <input type="number" min="1" max="50" data-path="opdrachten.drempelOntbreekt" data-type="int"> keer (over alle klassen opgeteld)</label>
+    <label class="row">Signaal bij te laat inleveren vanaf <input type="number" min="1" max="50" data-path="opdrachten.drempelTeLaat" data-type="int"> keer</label>
+    <label class="row">Opnieuw ophalen na <input type="number" min="1" max="168" data-path="opdrachten.cacheUren" data-type="int"> uur (handmatig vernieuwen kan altijd)</label>
+    <div class="btns"><button id="wisData">Lokale gegevens wissen</button><span id="dataInfo" style="font-size:13px;color:var(--muted)"></span></div>
+  </section>
+
+  <section>
+    <h2>Ontwikkelaar <label class="switch"><input type="checkbox" data-path="developer.enabled"><span></span></label></h2>
+    <p>Toont in het zijpaneel de Inspector: welke frames de Teams-pagina heeft, welke tokens er zijn (alleen host en scopes, nooit het token zelf) en welke API-calls Teams doet. Het rapport is geanonimiseerd en te kopiëren om samen nieuwe analyses te bouwen.</p>
+  </section>
+
+  <section id="updates">
+    <h2>Updates <label class="switch"><input type="checkbox" data-path="updates.check"><span></span></label></h2>
+    <p>Controleert om de 6 uur op GitHub of er een nieuwere release is (alleen versienummer en downloadlink). Bijwerken schrijft de nieuwe bestanden in de extensiemap die je één keer aanwijst.</p>
+    <div class="btns"><button id="checkUpdate">Nu controleren</button><button id="doUpdate" class="primary" disabled>Nu bijwerken</button><button id="pickFolder">Extensiemap kiezen</button><button id="forgetFolder" hidden>Map vergeten</button><a href="#" id="manualZip" style="font-size:13px">Zip downloaden</a></div>
+    <p id="folderName"></p>
+    <p id="updateProgress"></p>
+    <p id="updateStatus"></p>
+    <label class="row">GitHub-token (optioneel) <input type="password" id="ghToken" placeholder="github_pat_…" autocomplete="off" style="flex:1"><button id="ghTokenClear">Wissen</button></label>
+    <p>Alleen nodig tegen de limiet voor anonieme aanroepen (fine-grained token met Contents: Read-only). Staat alleen op dit apparaat.</p>
+  </section>
+
+  <section>
+    <div class="btns"><button id="reset">Alles terugzetten naar standaard</button><span id="versionLine" style="font-size:13px;color:var(--muted)"></span></div>
+  </section>
+</main>
+<div class="status" id="status">Opgeslagen</div>
+<script src="../content/defaults.js"></script>
+<script src="options.js"></script>
+<script src="updater.js"></script>
+</body>
+</html>

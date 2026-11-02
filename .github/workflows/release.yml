@@ -1,0 +1,52 @@
+# Bouwt bij elke tag v* een zip van de extensie en publiceert die als GitHub Release.
+# De extensie controleert /releases/latest; de zip in die release is de downloadlink.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versie in manifest.json moet gelijk zijn aan de tag
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          MANIFEST="$(node -p "require('./manifest.json').version")"
+          if [ "$TAG" != "$MANIFEST" ]; then
+            echo "::error::Tag v$TAG komt niet overeen met manifest.json ($MANIFEST)"
+            exit 1
+          fi
+
+      - name: Zip bouwen
+        run: |
+          mkdir -p dist/teams-docent-tools
+          rsync -a ./ dist/teams-docent-tools/ \
+            --exclude .git --exclude .github --exclude scripts --exclude dist \
+            --exclude .gitignore --exclude '.DS_Store'
+          cd dist
+          zip -qr "teams-docent-tools-${GITHUB_REF_NAME}.zip" teams-docent-tools
+          ls -l
+
+      - name: Release-notities uit README halen
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          LINE="$(grep -m1 -E "^- ${TAG//./\\.}:" README.md | sed -E 's/^- [^:]+: *//' || true)"
+          {
+            echo "${LINE:-Versie $TAG.}"
+            echo
+            echo "**Installeren of bijwerken:** download \`teams-docent-tools-${GITHUB_REF_NAME}.zip\`, pak uit, vervang de bestanden in je extensiemap en klik in de extensie op Herladen (of op ↻ bij \`chrome://extensions\`)."
+          } > dist/notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Versie ${{ github.ref_name }}
+          body_path: dist/notes.md
+          files: dist/teams-docent-tools-*.zip
+          generate_release_notes: true

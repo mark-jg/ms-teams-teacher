@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8">
+<style>
+  :root { --bg:#F2F2F7; --card:#fff; --fg:#1D1D1F; --muted:#6E6E73; --sep:rgba(60,60,67,.12); --accent:#5B5FC7; --shadow:0 1px 2px rgba(0,0,0,.05), 0 6px 18px rgba(0,0,0,.06); }
+  @media (prefers-color-scheme: dark) { :root { --bg:#000; --card:#1C1C1E; --fg:#F2F2F7; --muted:#8E8E93; --sep:rgba(255,255,255,.12); --accent:#7F84E8; --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35); } }
+  * { box-sizing:border-box; }
+  body { width:320px; margin:0; padding:12px; font:13px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif; color:var(--fg); background:var(--bg); -webkit-font-smoothing:antialiased; }
+  .head { display:flex; align-items:baseline; justify-content:space-between; padding:2px 4px 10px; }
+  .head h1 { font-size:17px; font-weight:700; letter-spacing:-.02em; margin:0; }
+  .head .ver { font-size:11px; color:var(--muted); }
+  .card { background:var(--card); border-radius:16px; box-shadow:var(--shadow); margin-bottom:10px; overflow:hidden; }
+  .row { display:flex; align-items:center; gap:10px; padding:11px 14px; min-height:46px; border-top:1px solid var(--sep); color:inherit; text-decoration:none; font:inherit; background:none; border-left:0; border-right:0; border-bottom:0; width:100%; text-align:left; cursor:default; }
+  .card .row:first-child { border-top:0; }
+  .row .ico { width:28px; height:28px; border-radius:8px; display:grid; place-items:center; color:#fff; background:var(--k, var(--accent)); flex:0 0 auto; }
+  .row .txt { flex:1; min-width:0; }
+  .row b { display:block; font-weight:500; font-size:13px; }
+  .row small { display:block; color:var(--muted); font-size:11px; line-height:1.25; }
+  .row.link { cursor:pointer; } .row.link:hover { background:color-mix(in srgb, var(--fg) 4%, transparent); }
+  .row .chev { color:var(--muted); font-size:16px; }
+  .switch { position:relative; width:42px; height:26px; flex:0 0 auto; }
+  .switch input { opacity:0; width:0; height:0; position:absolute; }
+  .switch span { position:absolute; inset:0; background:#D1D1D6; border-radius:26px; transition:.15s; }
+  @media (prefers-color-scheme: dark) { .switch span { background:#39393D; } }
+  .switch span::before { content:""; position:absolute; width:22px; height:22px; left:2px; top:2px; background:#fff; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,.2); transition:.15s; }
+  .switch input:checked + span { background:#34C759; }
+  .switch input:checked + span::before { transform:translateX(16px); }
+  .update { padding:12px 14px; background:color-mix(in srgb, #FF9500 14%, var(--card)); }
+  .update strong { display:block; font-size:13px; margin-bottom:2px; }
+  .update p { margin:2px 0 8px; font-size:12px; color:var(--muted); }
+  .update .btns { display:flex; gap:6px; flex-wrap:wrap; }
+  .update button { font:inherit; font-size:12px; font-weight:600; padding:7px 10px; border:0; border-radius:10px; background:var(--card); color:var(--fg); cursor:pointer; }
+  .update button.primary { background:var(--accent); color:#fff; }
+  .update button[disabled] { opacity:.5; cursor:default; }
+  .update .small { margin:8px 0 0; font-size:11px; } .update .small a { color:inherit; }
+  #updateProgress { margin:6px 0 0; font-size:11px; color:var(--muted); } #updateProgress:empty { display:none; }
+  .ok { padding:10px 14px; font-size:12px; color:var(--muted); }
+  .note { padding:4px 6px 2px; font-size:12px; color:var(--muted); } .note:empty { display:none; }
+  .foot { display:flex; justify-content:space-between; padding:2px 6px 0; font-size:11px; color:var(--muted); } .foot a { color:inherit; }
+</style></head>
+<body>
+<div class="head"><h1>Docent Tools · Teams</h1><span class="ver" id="ver"></span></div>
+<div class="card">
+  <div class="update" id="update" hidden>
+    <strong id="updTitle">Nieuwe versie beschikbaar</strong>
+    <p id="updText"></p>
+    <div class="btns"><button class="primary" id="doUpdate" disabled>Nu bijwerken</button><button id="pickFolder" hidden>Extensiemap kiezen</button><button id="updNotes">Wat is nieuw</button></div>
+    <p id="updateProgress"></p>
+    <p class="small">Handmatig: <a href="#" id="manualZip">zip downloaden</a> · <a href="#" id="updReload">herladen</a> na het vervangen van de bestanden. <span id="folderName" hidden></span><button id="forgetFolder" hidden>Map vergeten</button></p>
+  </div>
+  <div class="ok" id="upToDate">Je hebt de nieuwste versie.</div>
+</div>
+<div class="card">
+  <button class="row link" id="overzichtBtn"><span class="ico" style="--k:#5B5FC7"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/></svg></span><span class="txt"><b>Opdrachten over alle teams</b><small>Klassen, leerlingen, deadlines, nakijkwerk, signalen (Alt+O)</small></span><span class="chev">›</span></button>
+  <button class="row link" id="panelBtn"><span class="ico" style="--k:#007AFF"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span><span class="txt"><b>Zijpaneel openen</b><small>Koppeling, modules, weergave (Alt+K)</small></span><span class="chev">›</span></button>
+  <label class="row"><span class="ico" style="--k:#636366"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></span><span class="txt"><b>Tab van het zijpaneel</b><small>Het label "Docent Tools" aan de rand van Teams</small></span><span class="switch"><input type="checkbox" id="handle"><span></span></span></label>
+  <label class="row"><span class="ico" style="--k:#5856D6"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 8l-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/></svg></span><span class="txt"><b>Ontwikkelaarsmodus</b><small>Inspector: frames, tokens, API-calls</small></span><span class="switch"><input type="checkbox" id="developer"><span></span></span></label>
+  <button class="row link" id="options"><span class="ico" style="--k:#8E8E93"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></span><span class="txt"><b>Alle instellingen</b><small>Periode, drempels, cache, updates</small></span><span class="chev">›</span></button>
+</div>
+<div class="note" id="note"></div>
+<div class="foot"><span></span><a href="#" id="updCheck">Controleer op updates</a></div>
+<script src="../content/defaults.js"></script>
+<script src="popup.js"></script>
+<script src="../options/updater.js"></script>
+</body></html>
