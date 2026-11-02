@@ -272,18 +272,135 @@ TT.register({
     return this._rubricsCache.u;
   },
   /* ---------- Rapporten ---------- */
-  rapportInstellingen(TT) {
-    const r = TT.settings.rapport || {};
+  /* Instellingen voor rapporten; lege velden vallen terug op het standaardsjabloon (TT_RAPPORT_STANDAARD),
+   * vakgroepen op de naamheuristiek (AVO/BUR herkend op vaknaam, de rest praktijk). */
+  rapportParse(r) {
     const regels = (t) => String(t || "").split("\n").map((x) => x.trim()).filter(Boolean);
     const periodes = regels(r.periodes).map((x) => x.split("|").map((y) => y.trim())).filter((p) => p.length >= 2).map(([naam, begin, einde]) => ({ naam, begin, einde: einde || "" }));
     const opleidingen = {}; for (const x of regels(r.opleidingen)) { const m = /^([A-Za-z]+)\s*[=:]\s*(.+)$/.exec(x); if (m) opleidingen[m[1].toUpperCase()] = m[2].trim(); }
     const vakgroepen = regels(r.vakgroepen).map((x) => { const i = x.indexOf(":"); if (i < 0) return null; return { naam: x.slice(0, i).trim(), vakken: x.slice(i + 1).split(",").map((v) => v.trim()).filter(Boolean) }; }).filter(Boolean);
-    return { periodes, opleidingen, vakgroepen, cesuur: Math.min(0.95, Math.max(0.05, (parseFloat(r.cesuur) || 55) / 100)), afronding: r.afronding === "decimaal" ? "decimaal" : "heel", toelichting: r.toelichting || "", titel: r.titel || "Resultaten jaar {jaar}" };
+    return { periodes, opleidingen, vakgroepen };
   },
+  rapportInstellingen(TT) {
+    const r = TT.settings.rapport || {}, S = globalThis.TT_RAPPORT_STANDAARD || {};
+    const eigen = this.rapportParse(r), std = this.rapportParse(S);
+    return {
+      periodes: eigen.periodes.length ? eigen.periodes : std.periodes,
+      opleidingen: { ...std.opleidingen, ...eigen.opleidingen },
+      vakgroepen: eigen.vakgroepen.length ? eigen.vakgroepen : this.vakgroepenStandaard(TT),
+      cesuur: Math.min(0.95, Math.max(0.05, (parseFloat(r.cesuur) || 55) / 100)), afronding: r.afronding === "decimaal" ? "decimaal" : "heel",
+      toelichting: (r.toelichting || "").trim() || S.toelichting || "", titel: r.titel || "Resultaten jaar {jaar}", ingesteld: !!r.ingesteld
+    };
+  },
+  /* Vakken (teamnaam zonder klascode) in de geselecteerde teams. */
+  vakkenInData(TT) {
+    let re = null; try { re = new RegExp(this.patroon(TT), "i"); } catch {}
+    const sel = this.selectie();
+    const uit = new Set();
+    for (const c of this._data?.classes || []) { if (sel && !sel.has(c.id)) continue; const n = c.displayName || ""; const m = re && re.exec(n); const rest = m ? n.slice(m.index + m[0].length).trim() : n; if (rest) uit.add(rest); }
+    return [...uit].sort((a, b) => a.localeCompare(b, "nl"));
+  },
+  vakgroepenStandaard(TT) {
+    const S = globalThis.TT_RAPPORT_STANDAARD || {}, g = S.groepen || ["Praktijkvakken", "AVO-vakken en BUR"];
+    const vakken = this.vakkenInData(TT);
+    return [{ naam: g[0], vakken: vakken.filter((v) => !S.avo?.test(v)) }, { naam: g[1], vakken: vakken.filter((v) => S.avo?.test(v)) }].filter((x) => x.vakken.length);
+  },
+  opleidingCodes(TT) {
+    const uit = new Set();
+    for (const k of this.klassen(TT).klassen) { const m = /^([A-Za-z]+)\d{2}/.exec(k.naam); if (m) uit.add(m[1].toUpperCase()); }
+    return [...uit].sort();
+  },
+
+  /* ---------- Wizard: in vijf stappen een goed rapportsjabloon, vooraf ingevuld uit de teams ---------- */
+  rapportWizard(TT) {
+    document.getElementById("tt-rapport")?.remove();
+    const inst = this.rapportInstellingen(TT), S = globalThis.TT_RAPPORT_STANDAARD || {};
+    const vakken = this.vakkenInData(TT);
+    const codes = [...new Set([...this.opleidingCodes(TT), ...Object.keys(inst.opleidingen)])].sort();
+    const groepNamen = inst.vakgroepen.length ? inst.vakgroepen.map((g) => g.naam) : (S.groepen || ["Praktijkvakken", "AVO-vakken en BUR"]);
+    const st = {
+      periodes: inst.periodes.map((p) => ({ ...p })),
+      opleidingen: Object.fromEntries(codes.map((c) => [c, inst.opleidingen[c] || ""])),
+      groepen: [...groepNamen],
+      vakGroep: Object.fromEntries(vakken.map((v) => { const i = inst.vakgroepen.findIndex((g) => g.vakken.some((x) => x.toLowerCase() === v.toLowerCase())); return [v, i >= 0 ? i : (S.avo?.test(v) ? 1 : 0)]; })),
+      cesuur: Math.round(inst.cesuur * 100), afronding: inst.afronding, titel: inst.titel, toelichting: inst.toelichting, logo: null, logoNaam: ""
+    };
+    let stap = 0;
+    const box = TT.el("div", { id: "tt-rapport", class: "tt-wizard", role: "dialog", "aria-label": "Rapport instellen" });
+    const sluit = () => { box.remove(); document.removeEventListener("keydown", esc, true); };
+    const esc = (e) => { if (e.key === "Escape") { e.stopPropagation(); sluit(); } };
+    document.addEventListener("keydown", esc, true);
+    const input = (val, attrs, on) => { const i = TT.el("input", { class: "tt-input", value: val ?? "", ...attrs }); i.addEventListener("input", () => on(i.value)); return i; };
+    const stappen = [
+      ["Periodes", () => {
+        const lijst = TT.el("div", { class: "tt-wiz-lijst" });
+        const teken = () => lijst.replaceChildren(TT.el("div", { class: "tt-wiz-rij tt-wiz-kop" }, ["Naam", "Begin", "Einde", ""].map((h) => TT.el("span", { text: h }))),
+          ...st.periodes.map((p, i) => TT.el("div", { class: "tt-wiz-rij" }, [
+            input(p.naam, { "aria-label": "Naam" }, (v) => { p.naam = v; }), input(p.begin, { placeholder: "MM-DD", "aria-label": "Begin" }, (v) => { p.begin = v; }), input(p.einde, { placeholder: "MM-DD", "aria-label": "Einde" }, (v) => { p.einde = v; }),
+            TT.el("button", { class: "tt-btn tt-btn-sm", text: "×", title: "Verwijderen", onclick: () => { st.periodes.splice(i, 1); teken(); } })
+          ])));
+        teken();
+        return [TT.el("p", { class: "tt-muted", text: "Per periode de naam en de begin- en einddatum. Datums als MM-DD volgen elk schooljaar vanzelf; {jaar} wordt het leerjaar van de leerling (Periode 1.1 voor een eerstejaars, 2.1 voor een tweedejaars). Alleen periodes die begonnen zijn komen op het rapport." }), lijst,
+          TT.el("div", { class: "tt-row" }, [TT.el("button", { class: "tt-btn tt-btn-sm", text: "Periode toevoegen", onclick: () => { st.periodes.push({ naam: `Periode {jaar}.${st.periodes.length + 1}`, begin: "", einde: "" }); teken(); } }), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Standaard (4 periodes)", onclick: () => { st.periodes = this.rapportParse(S).periodes; teken(); } })])];
+      }],
+      ["Opleidingen", () => [TT.el("p", { class: "tt-muted", text: `Gevonden in je klascodes: ${codes.join(", ") || "geen"}. Vul per code de naam van de opleiding in zoals die op het rapport moet staan.` }),
+        TT.el("div", { class: "tt-wiz-lijst" }, codes.map((c) => TT.el("div", { class: "tt-wiz-rij tt-wiz-2" }, [TT.el("b", { text: c }), input(st.opleidingen[c], { placeholder: "Naam van de opleiding" }, (v) => { st.opleidingen[c] = v; })]))),
+        TT.el("div", { class: "tt-row" }, [TT.el("button", { class: "tt-btn tt-btn-sm", text: "Code toevoegen", onclick: () => { const c = prompt("Opleidingscode (zoals in de klascode, bijvoorbeeld MEP):"); if (c) { st.opleidingen[c.toUpperCase()] = ""; codes.push(c.toUpperCase()); teken(); } } })])]],
+      ["Vakken", () => [TT.el("p", { class: "tt-muted", text: `${vakken.length} vakken gevonden in je teams (teamnaam zonder klascode). Zet elk vak in een groep; de voorinvulling herkent AVO-vakken en BUR op naam.` }),
+        TT.el("div", { class: "tt-wiz-rij tt-wiz-2", style: "margin-bottom:6px" }, st.groepen.map((g, i) => input(g, { "aria-label": `Naam groep ${i + 1}` }, (v) => { st.groepen[i] = v; }))),
+        TT.el("div", { class: "tt-wiz-lijst" }, vakken.map((v) => { const sel = TT.el("select", { class: "tt-select" }, [...st.groepen.map((g, i) => TT.el("option", { value: String(i), text: g || `Groep ${i + 1}` })), TT.el("option", { value: "-1", text: "Overige vakken" })]); sel.value = String(st.vakGroep[v]); sel.addEventListener("change", () => { st.vakGroep[v] = parseInt(sel.value, 10); }); return TT.el("div", { class: "tt-wiz-rij tt-wiz-2" }, [TT.el("span", { text: v }), sel]); }))]],
+      ["Cijfers en tekst", () => {
+        const afr = TT.el("select", { class: "tt-select" }, [["heel", "Hele cijfers"], ["decimaal", "Eén decimaal"]].map(([v, l]) => TT.el("option", { value: v, text: l }))); afr.value = st.afronding; afr.addEventListener("change", () => { st.afronding = afr.value; });
+        const toel = TT.el("textarea", { class: "tt-input", style: "width:100%;min-height:110px;box-sizing:border-box", "aria-label": "Toelichting" }); toel.value = st.toelichting; toel.addEventListener("input", () => { st.toelichting = toel.value; });
+        return [TT.el("div", { class: "tt-wiz-lijst" }, [
+          TT.el("label", { class: "tt-wiz-rij tt-wiz-2" }, ["Cesuur (% voor een 5,5)", input(String(st.cesuur), { type: "number", min: "5", max: "95" }, (v) => { st.cesuur = parseInt(v, 10) || 55; })]),
+          TT.el("label", { class: "tt-wiz-rij tt-wiz-2" }, ["Afronding", afr]),
+          TT.el("label", { class: "tt-wiz-rij tt-wiz-2" }, ["Titel", input(st.titel, { placeholder: "Resultaten jaar {jaar}" }, (v) => { st.titel = v; })])
+        ]), TT.el("p", { class: "tt-muted", text: "Toelichting onder de cijfers ({jaar}, {klas}, {cohort} en {schooljaar} worden ingevuld):" }), toel];
+      }],
+      ["Logo", () => {
+        const status = TT.el("span", { class: "tt-muted", text: st.logoNaam ? `Gekozen: ${st.logoNaam}` : "Nog geen bestand gekozen." });
+        const f = TT.el("input", { type: "file", accept: "image/png,image/jpeg,image/svg+xml" });
+        f.addEventListener("change", () => { const b = f.files?.[0]; if (!b) return; if (b.size > 600000) { status.textContent = "Groter dan 600 kB, kies een kleinere versie."; return; } const r = new FileReader(); r.onload = () => { st.logo = String(r.result); st.logoNaam = b.name; status.textContent = `Gekozen: ${b.name}`; }; r.readAsDataURL(b); });
+        return [TT.el("p", { class: "tt-muted", text: "Kies het officiële logo van Mediacollege Amsterdam (horizontaal, kleur op wit) uit de huisstijlmap. Het blijft lokaal in de extensie. Zonder keuze gebruikt het rapport rapport/ma-logo.jpg uit de extensiemap als dat er staat, anders het woordmerk als tekst." }), TT.el("div", { class: "tt-row" }, [f, status])];
+      }]
+    ];
+    const kop = TT.el("div", { class: "tt-row", style: "justify-content:space-between" }, [TT.el("b", { id: "tt-wiz-titel" }), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Sluiten", onclick: sluit })]);
+    const stappenBalk = TT.el("div", { class: "tt-wiz-stappen" });
+    const inhoud = TT.el("div", { class: "tt-wiz-inhoud" });
+    const vorige = TT.el("button", { class: "tt-btn tt-btn-sm", text: "Vorige", onclick: () => { stap--; teken(); } });
+    const volgende = TT.el("button", { class: "tt-btn tt-btn-sm tt-btn-primary", onclick: () => TT.guard(() => { if (stap < stappen.length - 1) { stap++; teken(); } else opslaan(); }, "Rapport instellen") });
+    const opslaan = async () => {
+      const rapport = {
+        ingesteld: true,
+        periodes: st.periodes.filter((p) => p.naam && p.begin).map((p) => `${p.naam} | ${p.begin} | ${p.einde}`).join("\n"),
+        opleidingen: Object.entries(st.opleidingen).filter(([, n]) => n.trim()).map(([c, n]) => `${c} = ${n.trim()}`).join("\n"),
+        vakgroepen: st.groepen.map((g, i) => `${g || `Groep ${i + 1}`}: ${vakken.filter((v) => st.vakGroep[v] === i).join(", ")}`).join("\n"),
+        cesuur: st.cesuur, afronding: st.afronding, titel: st.titel || "Resultaten jaar {jaar}", toelichting: st.toelichting
+      };
+      await TT.saveSettings({ rapport });
+      if (st.logo) { try { await chrome.storage.local.set({ ttLogo: st.logo }); } catch {} }
+      TT.toast("Rapportsjabloon opgeslagen", "ok");
+      sluit();
+      this.rapportDialoog(TT);
+    };
+    const teken = () => {
+      kop.querySelector("#tt-wiz-titel").textContent = `Rapport instellen · stap ${stap + 1} van ${stappen.length}: ${stappen[stap][0]}`;
+      stappenBalk.replaceChildren(...stappen.map(([n], i) => TT.el("span", { class: "tt-wiz-stap" + (i === stap ? " is-on" : i < stap ? " is-klaar" : ""), text: n })));
+      inhoud.replaceChildren(...stappen[stap][1]());
+      vorige.disabled = stap === 0;
+      volgende.textContent = stap === stappen.length - 1 ? "Opslaan en rapporten maken" : "Volgende";
+    };
+    box.append(kop, stappenBalk, inhoud, TT.el("div", { class: "tt-row", style: "justify-content:space-between;margin-top:10px" }, [vorige, TT.el("span", { class: "tt-muted", text: "Alles is later aan te passen bij Instellingen › Rapporten." }), volgende]));
+    document.body.append(box);
+    teken();
+  },
+
   /* Keuzevenster: klassen en periodes, dan de afdrukbare rapporten openen of naar Excel. */
   rapportDialoog(TT) {
     document.getElementById("tt-rapport")?.remove();
     const inst = this.rapportInstellingen(TT);
+    if (!inst.ingesteld) return this.rapportWizard(TT);
     const K = this.klassen(TT);
     const klassen = K.klassen.filter((k) => k.leerlingen.length);
     const box = TT.el("div", { id: "tt-rapport", role: "dialog", "aria-label": "Rapporten" });
@@ -322,8 +439,8 @@ TT.register({
     box.append(
       TT.el("div", { class: "tt-row", style: "justify-content:space-between;margin-bottom:6px" }, [TT.el("b", { text: "Rapporten" }), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Sluiten", onclick: sluit })]),
       TT.el("div", { class: "tt-muted", text: "Klassen" }), TT.el("div", { class: "tt-kiezer-lijst", style: "max-height:30vh" }, kl.map((x) => x.row)),
-      TT.el("div", { class: "tt-muted", style: "margin-top:8px", text: "Periodes" }), pr.length ? TT.el("div", { class: "tt-kiezer-lijst", style: "max-height:22vh" }, pr.map((x) => x.row)) : TT.el("p", { class: "tt-muted", text: "Nog geen periodes ingesteld. Ga naar Instellingen › Rapporten en zet per regel: naam | begindatum | einddatum." }),
-      TT.el("div", { class: "tt-row", style: "margin-top:8px" }, [afr, TT.el("span", { class: "tt-muted", text: `cesuur ${Math.round(inst.cesuur * 100)}%` }), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Instellingen", onclick: () => chrome.runtime.sendMessage({ type: "openOptions" }) })]),
+      TT.el("div", { class: "tt-muted", style: "margin-top:8px", text: "Periodes" }), pr.length ? TT.el("div", { class: "tt-kiezer-lijst", style: "max-height:22vh" }, pr.map((x) => x.row)) : TT.el("p", { class: "tt-muted", text: "Nog geen periodes. Open de wizard om ze in te stellen." }),
+      TT.el("div", { class: "tt-row", style: "margin-top:8px" }, [afr, TT.el("span", { class: "tt-muted", text: `cesuur ${Math.round(inst.cesuur * 100)}%` }), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Wizard", title: "Sjabloon in vijf stappen aanpassen", onclick: () => this.rapportWizard(TT) }), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Instellingen", onclick: () => chrome.runtime.sendMessage({ type: "openOptions" }) })]),
       TT.el("div", { class: "tt-row", style: "margin-top:10px" }, [open, excel]), status
     );
     document.body.append(box);

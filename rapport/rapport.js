@@ -20,11 +20,11 @@ function render() {
   if (!model?.leerlingen?.length) { $("leeg").hidden = false; return; }
   $("leeg").hidden = true;
   const klas = $("klasFilter").value, toonLeeg = $("toonLeeg").checked, toonOpm = $("toonOpm").checked;
-  const periodes = model.periodes;
   let n = 0;
   for (const l of model.leerlingen) {
     if (klas && l.klas !== klas) continue;
     n++;
+    const periodes = l.periodeNamen || model.periodes;
     const titel = (model.titel || "Resultaten jaar {jaar}").replace("{jaar}", l.jaar ?? "").replace("{klas}", l.klas).replace("{cohort}", l.cohort ?? "").replace("{schooljaar}", model.schooljaar || "");
     const pagina = el("article", { class: "pagina" }, [
       el("div", { class: "kop" }, [
@@ -65,7 +65,7 @@ function render() {
     ]);
     host.append(pagina);
   }
-  $("info").textContent = `${n} ${n === 1 ? "rapport" : "rapporten"} · periodes: ${periodes.join(", ") || "geen"} · cesuur ${Math.round((model.cesuur || 0.55) * 100)}%`;
+  $("info").textContent = `${n} ${n === 1 ? "rapport" : "rapporten"} · periodes: ${(model.periodeKolommen || model.periodes).join(", ") || "geen"} · cesuur ${Math.round((model.cesuur || 0.55) * 100)}%`;
   document.title = `Rapporten${klas ? " " + klas : ""} · ${n}`;
 }
 

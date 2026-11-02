@@ -239,4 +239,11 @@ assert.equal(jour.periodes[0].cijfer, 8);                              // alleen
 assert.equal(jour.periodes[1].cijfer, null);
 assert.equal(ju.vakken.find((v) => v.vak === "Tekst").periodes[1].cijfer, 5.5);  // 11/20 = 55% → cesuur
 
+// Standaardsjabloon: datums zonder jaar volgen het schooljaar, {jaar} wordt het leerjaar van de leerling.
+const R3 = A.rapport(rp, { nu, periodes: [{ naam: "Periode {jaar}.1", begin: "08-01", einde: "10-31" }, { naam: "Periode {jaar}.2", begin: "11-01", einde: "01-31" }, { naam: "Periode {jaar}.3", begin: "02-01", einde: "04-15" }], klasVan: Kr.klasVan, teamKlas: Kr.teamKlas, patroon: PAT, afronding: "decimaal" });
+assert.deepEqual(R3.periodeKolommen, ["Periode 1", "Periode 2"]);
+assert.deepEqual(R3.leerlingen.find((l) => l.id === "u1").periodeNamen, ["Periode 1.1", "Periode 1.2"]);
+assert.deepEqual(R3.leerlingen.find((l) => l.id === "u2").periodeNamen, ["Periode 2.1", "Periode 2.2"]);
+assert.equal(R3.leerlingen.find((l) => l.id === "u1").vakken.find((v) => v.vak === "Tekst").periodes[1].cijfer, 5.5);
+
 console.log("analyse.test.js: alles in orde");

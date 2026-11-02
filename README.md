@@ -1,4 +1,4 @@
-# Docent Tools voor Teams (v0.5.0)
+# Docent Tools voor Teams (v0.5.1)
 
 Chrome-extensie voor Microsoft Teams (web) voor docenten: team-overstijgende analyses van opdrachten. Alles draait lokaal in je browser; er wordt niets naar een eigen server gestuurd. Zusje van [Docent Tools voor Magister](https://github.com/mark-jg/magister-docent), met dezelfde opzet.
 
@@ -62,7 +62,7 @@ De knop **Rapporten** opent een keuzevenster: klassen, periodes en afronding. **
 - Per vak (teamnaam zonder klascode) het cijfer per periode: het gewogen gemiddelde van de opdrachten met een deadline in die periode, omgerekend naar een cijfer met de cesuur (standaard 55% = 5,5, lineair naar 1 en 10). Onvoldoendes in magenta. Vakken zijn te groeperen (bijvoorbeeld Praktijkvakken en AVO-vakken).
 - Een vaste toelichting en per periode een vak voor opmerkingen, dat je in het rapport typt; opmerkingen worden per leerling en periode bewaard.
 
-Periodes, opleidingen, vakgroepen, cesuur, afronding, titel en toelichting staan bij Instellingen › Rapporten. De opmaak volgt het Mediacollege Design System: wit, zwart en magenta als enig accent, dunne hairlines, tekstkaders; Aeonik is een gelicentieerd lettertype, dus de pagina gebruikt de voorgeschreven vervanging Arial (en Georgia voor de titel). Het logo is ook een merkbestand en zit niet in deze repo: kies het bij Instellingen › Rapporten (blijft lokaal), of zet het officiële horizontale logo als `rapport/ma-logo.jpg` in de extensiemap; anders staat het woordmerk als tekst. Aanwezigheid staat niet in Teams en dus niet op het rapport.
+Er is een **standaardsjabloon** dat meteen werkt: vier periodes per schooljaar in leerjaarnotatie (Periode 1.1 t/m 1.4 voor een eerstejaars, 2.1 t/m 2.4 voor een tweedejaars), opleidingen MR en MIP, vakken automatisch in Praktijkvakken of AVO-vakken en BUR (herkend op naam), cesuur 55%, hele cijfers en de toelichting over het studieadvies. De eerste keer dat je op Rapporten klikt opent een **wizard** in vijf stappen (periodes, opleidingen, vakken, cijfers en tekst, logo), vooraf ingevuld uit je teams: gevonden opleidingscodes, gevonden vakken. Alles is later aan te passen via de knop Wizard of bij Instellingen › Rapporten. De opmaak volgt het Mediacollege Design System: wit, zwart en magenta als enig accent, dunne hairlines, tekstkaders; Aeonik is een gelicentieerd lettertype, dus de pagina gebruikt de voorgeschreven vervanging Arial (en Georgia voor de titel). Het logo is ook een merkbestand en zit niet in deze repo: kies het bij Instellingen › Rapporten (blijft lokaal), of zet het officiële horizontale logo als `rapport/ma-logo.jpg` in de extensiemap; anders staat het woordmerk als tekst. Aanwezigheid staat niet in Teams en dus niet op het rapport.
 
 Concept- en ingeplande opdrachten tellen niet mee. Vrijstelling (excused) telt niet als ontbrekend en niet mee in het gemiddelde.
 
@@ -102,6 +102,7 @@ Het zijpaneel toont onder **Koppeling** wat er aan de hand is:
 
 ## Wijzigingen
 
+- 0.5.1: standaardsjabloon voor rapporten (vier periodes in leerjaarnotatie, MR/MIP, vakken automatisch gegroepeerd, toelichting) en een wizard in vijf stappen die bij de eerste klik op Rapporten opent, vooraf ingevuld uit je teams; periodes als MM-DD volgen elk schooljaar.
 - 0.5.0: rapporten per leerling (cijfers per vak per periode, studentnummer uit het e-mailadres, klas, opleiding, cohort, leerjaar, opmerkingen per periode), afdrukbaar in de huisstijl van Mediacollege Amsterdam en naar Excel; instellingen voor periodes, opleidingen, vakgroepen, cesuur, afronding, titel en toelichting; e-mailadres en naamdelen van leerlingen worden meegehaald (eerste keer bijwerken haalt leden opnieuw op).
 - 0.4.0: tabblad Cijfers (gemiddelde per leerling per team, gewogen volgens de cijfercategorieën, met totaal en detail per categorie) en tabblad Rubrics (gelijke rubric-rijen over opdrachten en teams heen, met per leerling het gekozen niveau); Excel-bladen Cijfers, Cijfers per categorie, Rubric-rijen en Rubric-niveaus per leerling. Eerste keer bijwerken haalt alles opnieuw op.
 - 0.3.5: klascode vóór het streepje in de teamnaam is nu het standaardpatroon (MIP26A, MR26B, KD25); teams zonder code sluiten via overlap bij elke klas aan, ook een gecodeerde; de klasnaam is de meest voorkomende code in de groep; klassen zonder leerlingen staan niet meer in de keuzelijst en het tabblad.

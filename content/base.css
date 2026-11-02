@@ -132,3 +132,14 @@ html.tt-dark .tt-knob { background: #39393D; }
 
 /* Rapportvenster */
 #tt-rapport { position: fixed; z-index: 2147483100; top: 70px; right: 40px; width: 400px; max-height: 85vh; overflow: auto; padding: 12px; background: var(--tt-card); color: var(--tt-fg); border-radius: 14px; box-shadow: var(--tt-shadow); font: 13px/1.35 var(--tt-font); }
+#tt-rapport.tt-wizard { width: 560px; }
+.tt-wiz-stappen { display: flex; gap: 4px; margin: 8px 0 10px; }
+.tt-wiz-stap { flex: 1; text-align: center; font-size: 11px; padding: 4px 2px; border-radius: 6px; background: var(--tt-panel-bg); color: var(--tt-muted); }
+.tt-wiz-stap.is-on { background: var(--tt-accent); color: #fff; font-weight: 600; }
+.tt-wiz-stap.is-klaar { color: var(--tt-fg); }
+.tt-wiz-inhoud { max-height: 55vh; overflow: auto; }
+.tt-wiz-lijst { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.tt-wiz-rij { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 6px; align-items: center; }
+.tt-wiz-rij.tt-wiz-2 { grid-template-columns: 1fr 1.6fr; }
+.tt-wiz-kop { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--tt-muted); }
+.tt-wiz-rij .tt-input, .tt-wiz-rij .tt-select { width: 100%; box-sizing: border-box; }

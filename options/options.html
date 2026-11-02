@@ -68,9 +68,9 @@
 
   <section>
     <h2>Rapporten</h2>
-    <p>Rapport per leerling met per vak (team) het cijfer per periode, afdrukbaar in de huisstijl van Mediacollege Amsterdam. Het cijfer is het gewogen gemiddelde van de opdrachten met een deadline in die periode, omgerekend met de cesuur. Studentnummer komt uit het e-mailadres; cohort en leerjaar uit de klascode (MIP26A: cohort 2026).</p>
-    <label class="row" style="align-items:flex-start">Periodes<textarea data-path="rapport.periodes" placeholder="Periode 1.1 | 2026-08-24 | 2026-10-31&#10;Periode 1.2 | 2026-11-01 | 2027-01-31" style="flex:1;min-height:90px;font:13px ui-monospace,monospace"></textarea></label>
-    <p>Per regel: naam | begindatum | einddatum (JJJJ-MM-DD). Alleen periodes die al begonnen zijn komen op het rapport.</p>
+    <p>De eerste keer dat je in het overzicht op Rapporten klikt, opent een wizard die dit in vijf stappen invult, vooraf ingevuld uit je teams; lege velden hieronder gebruiken het standaardsjabloon (vier periodes per schooljaar met leerjaarnotatie, MR en MIP, vakken automatisch in Praktijkvakken of AVO-vakken en BUR). Rapport per leerling met per vak (team) het cijfer per periode, afdrukbaar in de huisstijl van Mediacollege Amsterdam. Het cijfer is het gewogen gemiddelde van de opdrachten met een deadline in die periode, omgerekend met de cesuur. Studentnummer komt uit het e-mailadres; cohort en leerjaar uit de klascode (MIP26A: cohort 2026).</p>
+    <label class="row" style="align-items:flex-start">Periodes<textarea data-path="rapport.periodes" placeholder="Standaard: Periode {jaar}.1 | 08-01 | 10-31 (en zo verder; MM-DD volgt elk schooljaar)" style="flex:1;min-height:90px;font:13px ui-monospace,monospace"></textarea></label>
+    <p>Per regel: naam | begin | einde, als MM-DD (volgt elk schooljaar) of JJJJ-MM-DD. {jaar} wordt het leerjaar van de leerling. Alleen periodes die al begonnen zijn komen op het rapport.</p>
     <label class="row" style="align-items:flex-start">Opleidingen<textarea data-path="rapport.opleidingen" style="flex:1;min-height:70px;font:13px ui-monospace,monospace"></textarea></label>
     <p>Per regel: code uit de klascode = naam, bijvoorbeeld <kbd>MR = Mediaredactiemedewerker</kbd>.</p>
     <label class="row" style="align-items:flex-start">Vakgroepen<textarea data-path="rapport.vakgroepen" placeholder="Praktijkvakken: Journalistiek, Interviewen, Tekst, Techniek&#10;AVO-vakken en BUR: Rekenen, Engels, Nederlands, BUR" style="flex:1;min-height:70px;font:13px ui-monospace,monospace"></textarea></label>

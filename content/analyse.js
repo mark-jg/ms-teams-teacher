@@ -354,9 +354,12 @@
     const naam = (uid) => data.namen?.[uid] || memberNaam.get(uid) || uid;
     let re = null; try { if (opties.patroon) re = new RegExp(opties.patroon, "i"); } catch {}
     const vakNaam = (t) => { const n = t.displayName || ""; const m = re && re.exec(n); if (!m) return n; const rest = n.slice(m.index + m[0].length).trim(); return rest || n; };
-    const periodes = (opties.periodes || []).map((p) => ({ naam: p.naam, begin: ts(p.begin) ?? -Infinity, einde: p.einde ? ts(p.einde) + DAG - 1 : Infinity })).filter((p) => p.begin <= nu).sort((a, b) => a.begin - b.begin);
-    const inPeriode = (a, p) => { const t = ts(a.dueDateTime) ?? ts(a.assignedDateTime); return t != null && t >= p.begin && t <= p.einde; };
     const sjStart = opties.schooljaarStart ? new Date(opties.schooljaarStart) : new Date(new Date(nu).getMonth() >= 7 ? new Date(nu).getFullYear() : new Date(nu).getFullYear() - 1, 7, 1);
+    // Datum "MM-DD" krijgt het jaar van het lopende schooljaar: augustus t/m december het startjaar, daarna het jaar erna.
+    const datum = (d) => { if (!d) return null; const m = /^(\d{2})-(\d{2})$/.exec(String(d).trim()); if (!m) return ts(d); const mnd = +m[1]; return new Date(mnd >= 8 ? sjStart.getFullYear() : sjStart.getFullYear() + 1, mnd - 1, +m[2]).getTime(); };
+    const periodes = (opties.periodes || []).map((p) => ({ naam: p.naam, begin: datum(p.begin) ?? -Infinity, einde: p.einde ? datum(p.einde) + DAG - 1 : Infinity })).filter((p) => p.begin <= nu).sort((a, b) => a.begin - b.begin);
+    const periodeNaam = (naam, jaar) => String(naam).replace(/\{jaar\}/g, jaar ?? "");
+    const inPeriode = (a, p) => { const t = ts(a.dueDateTime) ?? ts(a.assignedDateTime); return t != null && t >= p.begin && t <= p.einde; };
     const klasInfo = (klas) => {
       const m = /^([A-Za-z]+)(\d{2})([A-Za-z]?)/.exec(klas || "");
       if (!m) return { opleidingCode: "", opleiding: "", cohort: null, jaar: null };
@@ -394,19 +397,20 @@
       const achternaam = p.surname || volledig.split(" ").slice(1).join(" ") || "";
       // Teams van de klas van deze leerling (plus teams waar de leerling cijfers heeft).
       const teamIds = new Set([...(data.classes || []).filter((c) => opties.teamKlas?.[c.id] === klas && (!opties.klassen || opties.klassen.has(c.id)) && (data.members?.[c.id] || []).some((m) => m.id === uid)).map((c) => c.id), ...(per.get(uid)?.keys() || [])]);
+      const info = klasInfo(klas);
       const vakken = [...teamIds].map((tid) => {
         const t = klassen.get(tid); if (!t) return null;
         const vak = vakNaam(t);
-        const perP = periodes.map((pr, i) => { const items = per.get(uid)?.get(tid)?.get(i) || []; const g = teamGemiddelde(items, data.categorieen?.[tid] || []); return { naam: pr.naam, n: items.length, pct: g.eind, cijfer: naarCijfer(g.eind, opties) }; });
+        const perP = periodes.map((pr, i) => { const items = per.get(uid)?.get(tid)?.get(i) || []; const g = teamGemiddelde(items, data.categorieen?.[tid] || []); return { naam: periodeNaam(pr.naam, info.jaar), n: items.length, pct: g.eind, cijfer: naarCijfer(g.eind, opties) }; });
         return { vak, team: t.displayName, teamId: tid, groep: groepVan(vak), periodes: perP, n: perP.reduce((a, x) => a + x.n, 0) };
       }).filter(Boolean).sort((a, b) => a.groep.localeCompare(b.groep, "nl") || a.vak.localeCompare(b.vak, "nl"));
       const groepen = [];
       for (const v of vakken) { let g = groepen.find((x) => x.naam === v.groep); if (!g) { g = { naam: v.groep, vakken: [] }; groepen.push(g); } g.vakken.push(v); }
       const volgorde = (opties.vakgroepen || []).map((g) => g.naam);
       groepen.sort((a, b) => { const ia = volgorde.indexOf(a.naam), ib = volgorde.indexOf(b.naam); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.naam.localeCompare(b.naam, "nl"); });
-      return { id: uid, naam: volledig, roepnaam, achternaam, studentnummer: nr, mail, klas, ...klasInfo(klas), vakken, groepen, aantalCijfers: vakken.reduce((a, v) => a + v.n, 0) };
+      return { id: uid, naam: volledig, roepnaam, achternaam, studentnummer: nr, mail, klas, ...info, periodeNamen: periodes.map((p) => periodeNaam(p.naam, info.jaar)), vakken, groepen, aantalCijfers: vakken.reduce((a, v) => a + v.n, 0) };
     }).filter(Boolean).sort((a, b) => a.klas.localeCompare(b.klas, "nl", { numeric: true }) || a.achternaam.localeCompare(b.achternaam, "nl") || a.naam.localeCompare(b.naam, "nl"));
-    return { periodes: periodes.map((p) => p.naam), leerlingen };
+    return { periodes: periodes.map((p) => p.naam), periodeKolommen: periodes.map((p) => String(p.naam).replace(/\{jaar\}\.?/g, "").trim()), leerlingen };
   }
 
   const API = { bouw, beoordeel, periodeBereik, naarTabellen, klassen, cijfers, rubrics, rijNiveaus, actieveOpdrachten, rapport, naarCijfer, teamGemiddelde };
