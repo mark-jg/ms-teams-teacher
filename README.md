@@ -1,4 +1,4 @@
-# Docent Tools voor Teams (v0.3.0)
+# Docent Tools voor Teams (v0.3.1)
 
 Chrome-extensie voor Microsoft Teams (web) voor docenten: team-overstijgende analyses van opdrachten. Alles draait lokaal in je browser; er wordt niets naar een eigen server gestuurd. Zusje van [Docent Tools voor Magister](https://github.com/mark-jg/magister-docent), met dezelfde opzet.
 
@@ -54,7 +54,9 @@ Dat token mist `EduRoster`. Daarom gaat de klassenlijst niet via `/education/me/
 
 Een script in de pagina (`content/netlog.js`) onthoudt per host het Bearer-token dat Teams meestuurt, en valt terug op de MSAL-cache van Teams in localStorage. Het token blijft in het geheugen van de pagina; de extensie krijgt alleen de antwoorden. Er worden alleen leesaanroepen gedaan (GET, en POST naar `$batch` voor namen).
 
-De opgehaalde klassen, opdrachten en inleveringen (alleen de velden die de analyse nodig heeft) blijven in `chrome.storage.local`, zodat het overzicht de volgende keer direct opent. Standaard wordt na 6 uur opnieuw opgehaald; "Vernieuwen" kan altijd; wissen kan in de instellingen.
+De opgehaalde teams, opdrachten en inleveringen (alleen de velden die de analyse nodig heeft) blijven in `chrome.storage.local`, zodat het overzicht de volgende keer direct opent. Ze blijven ook bewaard bij een update van de extensie, zolang die in dezelfde map blijft staan (zelf bijwerken doet dat; een zip uitpakken over dezelfde map ook). Laad je de extensie uit een nieuwe map, dan ziet Chrome dat als een andere extensie met lege opslag.
+
+**Bijwerken** is incrementeel: teams, opdrachten en leden worden opnieuw opgehaald, maar inleveringen van opdrachten met een deadline ouder dan 45 dagen worden hergebruikt zolang de opdracht niet is gewijzigd. Dat scheelt het grootste deel van de aanroepen. Standaard gebeurt dat automatisch na 24 uur, op de achtergrond terwijl het oude overzicht in beeld blijft; eens per 7 dagen wordt toch alles opgehaald. Alt+klik op Bijwerken haalt alles direct opnieuw op; beide termijnen staan in de instellingen.
 
 ### Als de koppeling niet werkt
 
@@ -78,6 +80,7 @@ Het zijpaneel toont onder **Koppeling** wat er aan de hand is:
 
 ## Wijzigingen
 
+- 0.3.1: opgehaalde gegevens blijven bruikbaar na een update van de extensie (aanvullen in plaats van opnieuw ophalen); Bijwerken is incrementeel (inleveringen van oude opdrachten worden hergebruikt) en gebeurt op de achtergrond terwijl het overzicht open blijft; automatisch bijwerken na 24 uur, alles opnieuw eens per 7 dagen; onbeperkte lokale opslag.
 - 0.3.0: klassen afgeleid uit lidmaatschap (wie samen in dezelfde teams zit) en optioneel uit een klascode in de teamnaam; nieuw tabblad Klassen met klaslijsten, kolom Klas bij Leerlingen en Signalen, keuzelijst Klas als filter, Excel-bladen Klassen en Klasindeling; het oude tabblad Klassen heet nu Teams.
 - 0.2.0: klassen automatisch bepaald (klasteam, niet gearchiveerd, eigenaar, dit schooljaar) met een klassenkiezer die de keuze onthoudt; schakelaar Alleen problemen; betere standaardvolgorde per tabblad; filters en tabblad worden onthouden; gearchiveerde teams en opdrachten van vóór het vorige schooljaar worden niet meer opgehaald.
 - 0.1.1: werkt met het Graph-token van de app Opdrachten (EduAssignments zonder EduRoster): klassen via de teams-lijst, leden via groepsleden; de extensie wacht tot de app Opdrachten open is en kiest het juiste frame op scopes; status in het zijpaneel legt uit wat er mist.

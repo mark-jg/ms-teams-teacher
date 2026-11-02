@@ -78,7 +78,7 @@ TT.register({
         TT.el("div", { id: "tt-opdrachten-widget" }),
         TT.el("div", { class: "tt-row", style: "margin-top:8px" }, [
           TT.el("button", { class: "tt-btn tt-btn-primary", text: "Overzicht openen", onclick: () => TT.module("opdrachten")?.open(TT) }),
-          TT.el("button", { class: "tt-btn", text: "Opnieuw ophalen", onclick: () => TT.module("opdrachten")?.open(TT, { vernieuw: true }) }),
+          TT.el("button", { class: "tt-btn", text: "Bijwerken", title: "Haalt alleen op wat kan veranderen; Alt+klik haalt alles opnieuw op", onclick: (e) => TT.module("opdrachten")?.bijwerken(TT, { volledig: e.altKey }) }),
           TT.el("span", { class: "tt-kbd", text: "Alt+O" })
         ])
       ]), "Klassen, opdrachten, inleveringen en cijfers via Microsoft Graph. Blijft lokaal bewaard, zodat het overzicht de volgende keer direct opent."),

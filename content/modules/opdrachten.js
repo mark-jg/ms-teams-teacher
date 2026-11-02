@@ -14,8 +14,19 @@ TT.register({
     this._filter.periode = TT.settings.opdrachten.periode || "schooljaar";
     chrome.storage.local.get(["ttData", "ttFilter"]).then(({ ttData, ttFilter }) => {
       if (ttFilter) { Object.assign(this._filter, ttFilter, { klassen: ttFilter.klassen ? new Set(ttFilter.klassen) : null, zoek: "" }); if (ttFilter.view) this._view = ttFilter.view; }
-      if (ttData?.classes) { this._data = ttData; this.renderWidget(TT); }
+      if (ttData?.classes) { this._data = this.migreer(ttData); this.renderWidget(TT); }
     });
+  },
+  /* Gegevens van een oudere versie bruikbaar maken; ontbrekende velden krijgen een neutrale waarde.
+   * Zo hoeft er na een update van de extensie niets opnieuw opgehaald te worden. */
+  migreer(d) {
+    if (!d || !d.classes) return d;
+    d.schema = 3;
+    if (!("me" in d)) d.me = null;
+    d.volledigAt ??= d.at;
+    for (const c of d.classes) { c.isArchived ??= false; c.specialization ??= null; c.eigenaar ??= null; c.createdDateTime ??= null; }
+    d.members ??= {}; d.submissions ??= {}; d.namen ??= {}; d.fouten ??= [];
+    return d;
   },
   saveFilter() {
     const f = this._filter;
@@ -53,9 +64,14 @@ TT.register({
    * Het Graph-token met EduAssignments zit alleen in het frame van de app Opdrachten en mist EduRoster.
    * Daarom: klassen via /education/me/classes als dat mag, anders via de teams-lijst (/me/joinedTeams);
    * leden via /education/classes/{id}/members als dat mag, anders via groepsleden minus eigenaren. */
-  async laden(TT, voortgang = () => {}) {
+  async laden(TT, voortgang = () => {}, { volledig = false } = {}) {
     if (this._busy) return;
     this._busy = true;
+    // Incrementeel: oude inleveringen hergebruiken voor opdrachten waarvan de deadline langer dan 45 dagen
+    // voorbij is en de opdracht zelf niet is gewijzigd. Eens per 7 dagen toch alles (volledigDagen).
+    const oud = !volledig && this._data?.classes && Date.now() - (this._data.volledigAt || 0) < (TT.settings.opdrachten.volledigDagen ?? 7) * 864e5 ? this._data : null;
+    const oudA = new Map((oud?.assignments || []).map((a) => [a.id, a]));
+    let hergebruikt = 0;
     try {
       voortgang("Zoeken naar de app Opdrachten in Teams…", 0);
       const w = await TT.graphWindow("EduAssignments", { wait: 90000, onWait: (sec) => voortgang(`Open de app Opdrachten in Teams (linkerbalk). Daarin zit het token dat de extensie nodig heeft. Wachten… ${sec}s`, 0) });
@@ -86,7 +102,7 @@ TT.register({
         const a = await TT.graph(`/education/classes/${c.id}/assignments`);
         if (a.status === 200) {
           c.klas = true;
-          for (const x of a.value) assignments.push({ id: x.id, classId: c.id, displayName: x.displayName, status: x.status, dueDateTime: x.dueDateTime, assignedDateTime: x.assignedDateTime, closeDateTime: x.closeDateTime, createdDateTime: x.createdDateTime, allowLateSubmissions: x.allowLateSubmissions, grading: x.grading ? { "@odata.type": x.grading["@odata.type"], maxPoints: x.grading.maxPoints } : null, webUrl: x.webUrl });
+          for (const x of a.value) assignments.push({ id: x.id, classId: c.id, displayName: x.displayName, status: x.status, dueDateTime: x.dueDateTime, assignedDateTime: x.assignedDateTime, closeDateTime: x.closeDateTime, createdDateTime: x.createdDateTime, lastModifiedDateTime: x.lastModifiedDateTime, allowLateSubmissions: x.allowLateSubmissions, grading: x.grading ? { "@odata.type": x.grading["@odata.type"], maxPoints: x.grading.maxPoints } : null, webUrl: x.webUrl });
         } else { c.klas = bron === "education"; c.fout = `opdrachten: HTTP ${a.status}${a.code ? " " + a.code : ""}`; }
         if (c.klas) {
           const [m, go] = await Promise.all([
@@ -115,12 +131,20 @@ TT.register({
       assignments.length = 0; assignments.push(...recent);
       const actief = assignments.filter((a) => ["published", "assigned", "inactive"].includes(a.status));
       const submissions = {}; let k = 0;
+      const grens45 = Date.now() - 45 * 864e5;
+      const herbruikbaar = (a) => {
+        const o = oudA.get(a.id), subs = oud?.submissions?.[a.id];
+        if (!o || !subs) return false;
+        const due = a.dueDateTime ? new Date(a.dueDateTime).getTime() : null;
+        return due != null && due < grens45 && (!o.lastModifiedDateTime || o.lastModifiedDateTime === a.lastModifiedDateTime);
+      };
       await TT.pool(actief, 4, async (a) => {
+        if (herbruikbaar(a)) { submissions[a.id] = oud.submissions[a.id]; hergebruikt++; voortgang(`Inleveringen van ${++k}/${actief.length} opdrachten… (${hergebruikt} hergebruikt)`, 0.3 + 0.6 * (k / actief.length)); return; }
         const s = await TT.graph(`/education/classes/${a.classId}/assignments/${a.id}/submissions?$expand=outcomes`);
         submissions[a.id] = s.status === 200 ? s.value.map((x) => ({ id: x.id, status: x.status, submittedDateTime: x.submittedDateTime, returnedDateTime: x.returnedDateTime, reassignedDateTime: x.reassignedDateTime, excusedDateTime: x.excusedDateTime, recipient: { userId: x.recipient?.userId || x.recipient?.id || null },
           outcomes: (x.outcomes || []).filter((o) => /pointsOutcome/i.test(o["@odata.type"] || "")).map((o) => ({ "@odata.type": o["@odata.type"], points: o.points ? { points: o.points.points } : null, publishedPoints: o.publishedPoints ? { points: o.publishedPoints.points } : null })) })) : [];
         if (s.status !== 200) a.fout = `inleveringen: HTTP ${s.status}`;
-        voortgang(`Inleveringen van ${++k}/${actief.length} opdrachten…`, 0.3 + 0.6 * (k / actief.length));
+        voortgang(`Inleveringen van ${++k}/${actief.length} opdrachten…${hergebruikt ? ` (${hergebruikt} hergebruikt)` : ""}`, 0.3 + 0.6 * (k / actief.length));
       });
       // Namen van leerlingen die niet (meer) lid zijn: via $batch op /users.
       const bekend = new Set(Object.values(members).flat().map((u) => u.id));
@@ -132,7 +156,7 @@ TT.register({
         for (const [id, r] of res) if (r.status === 200 && r.body?.displayName) namen[id] = r.body.displayName;
       }
       const fouten = [...classes.filter((c) => c.fout).map((c) => `${c.displayName}: ${c.fout}`), ...actief.filter((a) => a.fout).map((a) => `${a.displayName}: ${a.fout}`)];
-      const data = { at: Date.now(), bron, rosterOk, me, weggelaten, classes: classes.map(({ id, displayName, classCode, externalName, isArchived, specialization, eigenaar, createdDateTime }) => ({ id, displayName, classCode, externalName, isArchived: !!isArchived, specialization: specialization || null, eigenaar: eigenaar ?? null, createdDateTime: createdDateTime || null })), members, assignments, submissions, namen, fouten };
+      const data = { schema: 3, at: Date.now(), volledigAt: oud ? oud.volledigAt || oud.at : Date.now(), hergebruikt, bron, rosterOk, me, weggelaten, classes: classes.map(({ id, displayName, classCode, externalName, isArchived, specialization, eigenaar, createdDateTime }) => ({ id, displayName, classCode, externalName, isArchived: !!isArchived, specialization: specialization || null, eigenaar: eigenaar ?? null, createdDateTime: createdDateTime || null })), members, assignments, submissions, namen, fouten };
       this._data = data;
       try { await chrome.storage.local.set({ ttData: data }); } catch (e) { console.warn("[TT] opslaan mislukt", e); }
       voortgang("Klaar", 1);
@@ -173,14 +197,15 @@ TT.register({
     const r = this.analyse(TT);
     host.replaceChildren(
       TT.el("div", { class: "tt-stat" }, [["Klassen", this.klassen(TT).klassen.length], ["Teams", r.totaal.klassen], ["Opdrachten", r.totaal.opdrachten], ["Leerlingen", r.totaal.leerlingen], ["Na te kijken", r.totaal.nakijken], ["Signalen", r.signalen.length]].map(([l, v]) => TT.el("div", {}, [TT.el("b", { text: String(v) }), TT.el("small", { text: l })]))),
-      TT.el("div", { class: "tt-muted", style: "margin-top:6px", text: `Opgehaald ${TT.fmtDateTime(this._data.at)} · ${this.selectieLabel()} · ${this.periodeLabel()}` })
+      TT.el("div", { class: "tt-muted", style: "margin-top:6px", text: `Opgehaald ${TT.fmtDateTime(this._data.at)} · ${this.selectieLabel()} · ${this.periodeLabel()}` }),
+      TT.el("div", { class: "tt-muted tt-bijwerk", "aria-live": "polite" })
     );
   },
   selectieLabel() { const s = this.selectie(), n = this._data?.classes.length || 0; return s ? `${s.size} van ${n} klassen` : `alle ${n} klassen`; },
   periodeLabel() { return { schooljaar: "dit schooljaar", 30: "laatste 30 dagen", 90: "laatste 90 dagen", alles: "alles" }[this._filter.periode] || "dit schooljaar"; },
 
   /* ---------- Overzicht ---------- */
-  async open(TT, { vernieuw = false } = {}) {
+  async open(TT, { vernieuw = false, volledig = false } = {}) {
     if (!this._overlay) {
       this._overlay = TT.el("div", { id: "tt-overlay", role: "dialog", "aria-label": "Opdrachten over alle teams", onclick: (e) => { if (e.target === this._overlay) this.close(); } });
       document.body.append(this._overlay);
@@ -188,22 +213,36 @@ TT.register({
       window.addEventListener("keydown", this._esc, true);
     }
     this._overlay.hidden = false;
-    // Ook opnieuw ophalen als de gegevens van een oudere versie zijn (zonder teamgegevens).
-    const stale = this._data && (Date.now() - this._data.at > (TT.settings.opdrachten.cacheUren || 6) * 3600e3 || !("me" in this._data));
-    if (!this._data || vernieuw || stale) {
-      const prog = TT.el("div", { class: "tt-sheet", style: "max-width:520px;align-self:center;height:auto" }, [
-        TT.el("div", { class: "tt-sheet-head" }, [TT.el("h2", { text: "Opdrachten ophalen" }), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Sluiten", onclick: () => this.close() })]),
-        TT.el("div", { style: "padding:18px" }, [TT.el("p", { id: "tt-prog-txt", text: stale && !vernieuw ? "Gegevens zijn ouder dan de cache-tijd, vernieuwen…" : "Verbinden met Microsoft Graph…" }), TT.el("div", { class: "tt-progress" }, TT.el("i")), TT.el("p", { class: "tt-muted", style: "margin-top:10px", text: "Blijft binnen je eigen Teams-sessie; er gaat niets naar een eigen server." })])
-      ]);
-      this._overlay.replaceChildren(prog);
-      try {
-        await this.laden(TT, (txt, f) => { const t = prog.querySelector("#tt-prog-txt"), b = prog.querySelector(".tt-progress i"); if (t) t.textContent = txt; if (b) b.style.width = Math.round(f * 100) + "%"; });
-      } catch (e) {
-        if (!this._data) { prog.querySelector("#tt-prog-txt").textContent = `Mislukt: ${e.message || e}`; prog.querySelector(".tt-progress").remove(); prog.querySelector("div[style]").append(TT.el("div", { class: "tt-row", style: "margin-top:10px" }, [TT.el("button", { class: "tt-btn tt-btn-primary", text: "Opnieuw proberen", onclick: () => this.open(TT, { vernieuw: true }) }), TT.el("button", { class: "tt-btn", text: "Inspector", onclick: () => { this.close(); TT.module("inspector")?.open(TT); } })])); return; }
-        TT.toast(`Vernieuwen mislukt, oude gegevens getoond: ${e.message || e}`, "err", 5000);
-      }
+    const stale = this._data && Date.now() - this._data.at > (TT.settings.opdrachten.cacheUren || 6) * 3600e3;
+    if (this._data && !volledig) {
+      // Oude gegevens meteen tonen; bijwerken gebeurt op de achtergrond.
+      this.render(TT);
+      if (vernieuw || stale) this.bijwerken(TT);
+      return;
+    }
+    const prog = TT.el("div", { class: "tt-sheet", style: "max-width:520px;align-self:center;height:auto" }, [
+      TT.el("div", { class: "tt-sheet-head" }, [TT.el("h2", { text: "Opdrachten ophalen" }), TT.el("button", { class: "tt-btn tt-btn-sm", text: "Sluiten", onclick: () => this.close() })]),
+      TT.el("div", { style: "padding:18px" }, [TT.el("p", { id: "tt-prog-txt", text: "Verbinden met Microsoft Graph…" }), TT.el("div", { class: "tt-progress" }, TT.el("i")), TT.el("p", { class: "tt-muted", style: "margin-top:10px", text: "Blijft binnen je eigen Teams-sessie; er gaat niets naar een eigen server." })])
+    ]);
+    this._overlay.replaceChildren(prog);
+    try {
+      await this.laden(TT, (txt, f) => { const t = prog.querySelector("#tt-prog-txt"), b = prog.querySelector(".tt-progress i"); if (t) t.textContent = txt; if (b) b.style.width = Math.round(f * 100) + "%"; }, { volledig: true });
+    } catch (e) {
+      if (!this._data) { prog.querySelector("#tt-prog-txt").textContent = `Mislukt: ${e.message || e}`; prog.querySelector(".tt-progress").remove(); prog.querySelector("div[style]").append(TT.el("div", { class: "tt-row", style: "margin-top:10px" }, [TT.el("button", { class: "tt-btn tt-btn-primary", text: "Opnieuw proberen", onclick: () => this.open(TT, { volledig: true }) }), TT.el("button", { class: "tt-btn", text: "Inspector", onclick: () => { this.close(); TT.module("inspector")?.open(TT); } })])); return; }
+      TT.toast(`Ophalen mislukt, oude gegevens getoond: ${e.message || e}`, "err", 5000);
     }
     this.render(TT);
+  },
+  /* Bijwerken op de achtergrond terwijl het overzicht open blijft; de werkbalk toont de voortgang. */
+  async bijwerken(TT, { volledig = false } = {}) {
+    if (this._busy) return;
+    const status = (txt) => { const el = this._overlay?.querySelector("#tt-bijwerk-status"); if (el) el.textContent = txt; const w = document.querySelector("#tt-opdrachten-widget .tt-bijwerk"); if (w) w.textContent = txt; };
+    try {
+      await this.laden(TT, (txt) => status(`Bijwerken: ${txt}`), { volledig });
+      status("");
+      if (this._overlay && !this._overlay.hidden) this.render(TT);
+      TT.toast(volledig ? "Alles opnieuw opgehaald" : `Bijgewerkt${this._data?.hergebruikt ? ` (${this._data.hergebruikt} opdrachten hergebruikt)` : ""}`, "ok");
+    } catch (e) { status(""); TT.toast(`Bijwerken mislukt: ${e.message || e}`, "err", 5000); }
   },
   close() { if (this._overlay) this._overlay.hidden = true; },
 
@@ -228,10 +267,10 @@ TT.register({
       TT.el("h2", { text: "Opdrachten over alle teams" }), tabs,
       TT.el("button", { class: "tt-btn tt-btn-sm", text: "Dit tabblad naar Excel", onclick: () => this.exportTab(TT) }),
       TT.el("button", { class: "tt-btn tt-btn-sm", text: "Alles naar Excel", onclick: () => this.exportAlles(TT) }),
-      TT.el("button", { class: "tt-btn tt-btn-sm", text: "Vernieuwen", title: `Opgehaald ${TT.fmtDateTime(this._data.at)}`, onclick: () => this.open(TT, { vernieuw: true }) }),
+      TT.el("button", { class: "tt-btn tt-btn-sm", text: "Bijwerken", title: `Opgehaald ${TT.fmtDateTime(this._data.at)}. Haalt alleen op wat kan veranderen; Alt+klik haalt alles opnieuw op.`, onclick: (e) => this.bijwerken(TT, { volledig: e.altKey }) }),
       TT.el("button", { class: "tt-btn tt-btn-sm", text: "Sluiten", onclick: () => this.close() })
     ]);
-    const tools = TT.el("div", { class: "tt-sheet-tools" }, [kiezer, klasSel, periode, prob, zoek, TT.el("span", { class: "tt-muted", style: "margin-left:auto", text: [verborgenTxt, `opgehaald ${TT.fmtDateTime(this._data.at)}`, this._data.fouten?.length ? `${this._data.fouten.length} met fout` : ""].filter(Boolean).join(" · ") })]);
+    const tools = TT.el("div", { class: "tt-sheet-tools" }, [kiezer, klasSel, periode, prob, zoek, TT.el("span", { id: "tt-bijwerk-status", class: "tt-muted", style: "margin-left:auto", "aria-live": "polite" }), TT.el("span", { class: "tt-muted", text: [verborgenTxt, `opgehaald ${TT.fmtDateTime(this._data.at)}`, this._data.fouten?.length ? `${this._data.fouten.length} met fout` : ""].filter(Boolean).join(" · ") })]);
     this._body = TT.el("div", { class: "tt-sheet-body" });
     this._overlay.replaceChildren(TT.el("div", { class: "tt-sheet" }, [head, tools, this._body]));
     this.renderBody(TT);

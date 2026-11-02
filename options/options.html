@@ -53,11 +53,13 @@
     <label class="row">Standaardperiode <select data-path="opdrachten.periode"><option value="schooljaar">Dit schooljaar (1 aug – 31 jul)</option><option value="90">Laatste 90 dagen</option><option value="30">Laatste 30 dagen</option><option value="alles">Alles</option></select></label>
     <label class="row">Signaal bij ontbrekend werk vanaf <input type="number" min="1" max="50" data-path="opdrachten.drempelOntbreekt" data-type="int"> keer (over alle klassen opgeteld)</label>
     <label class="row">Signaal bij te laat inleveren vanaf <input type="number" min="1" max="50" data-path="opdrachten.drempelTeLaat" data-type="int"> keer</label>
-    <label class="row">Opnieuw ophalen na <input type="number" min="1" max="168" data-path="opdrachten.cacheUren" data-type="int"> uur (handmatig vernieuwen kan altijd)</label>
+    <label class="row">Automatisch bijwerken na <input type="number" min="1" max="720" data-path="opdrachten.cacheUren" data-type="int"> uur (op de achtergrond; het oude overzicht blijft in beeld)</label>
+    <label class="row">Alles opnieuw ophalen eens per <input type="number" min="1" max="90" data-path="opdrachten.volledigDagen" data-type="int"> dagen (tussendoor worden inleveringen van opdrachten met een deadline ouder dan 45 dagen hergebruikt)</label>
+    <p>De opgehaalde gegevens blijven bewaard bij een update van de extensie, zolang de extensie in dezelfde map blijft staan (zelf bijwerken doet dat; een zip uitpakken over dezelfde map ook).</p>
     <label class="row"><label class="switch"><input type="checkbox" data-path="opdrachten.gearchiveerd"><span></span></label> Ook gearchiveerde teams ophalen (standaard uit; scheelt veel aanroepen)</label>
     <label class="row">Klascode in teamnaam (regex, optioneel) <input type="text" data-path="opdrachten.klascodePatroon" placeholder="bijv. \b(\d[A-Z]{1,3}\d?)\b" style="flex:1;font-family:ui-monospace,monospace"></label>
     <p>Klassen worden afgeleid uit wie samen in dezelfde teams zit. Staat de klascode in de teamnaam, vul dan een patroon in met één groep voor de code; teams met dezelfde code vormen dan zeker één klas en de klas krijgt die naam. Voorbeeld: <kbd>\b(\d[A-Z]{1,3}\d?)\b</kbd> herkent 4A, 2H3 en 3VWO; <kbd>-(\w+)$</kbd> pakt wat na het laatste streepje staat.</p>
-    <p>Welke teams meetellen bepaalt de extensie automatisch: eigen, niet-gearchiveerde klasteams van dit schooljaar (aangemaakt sinds juni, of met opdrachten in dit schooljaar). In het overzicht kun je via de knop "Klassen: x van y" zelf teams kiezen; die keuze wordt onthouden.</p>
+    <p>Welke teams meetellen bepaalt de extensie automatisch: eigen, niet-gearchiveerde klasteams van dit schooljaar (aangemaakt sinds juni, of met opdrachten in dit schooljaar). In het overzicht kun je via "Klassen" zelf kiezen; die keuze wordt onthouden.</p>
     <div class="btns"><button id="wisData">Lokale gegevens wissen</button><span id="dataInfo" style="font-size:13px;color:var(--muted)"></span></div>
   </section>
 
