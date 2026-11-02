@@ -88,4 +88,37 @@ const [van, tot] = A.periodeBereik("schooljaar", nu);
 assert.equal(new Date(van).getMonth(), 7);
 assert.equal(new Date(tot).getFullYear(), 2027);
 
+// Klassen afleiden: team per vak, klas = leerlingen die samen in dezelfde teams zitten.
+const sch = {
+  classes: [
+    { id: "t1", displayName: "Engels 4A 2526" }, { id: "t2", displayName: "Wiskunde 4A" }, { id: "t3", displayName: "Nederlands 4A" },
+    { id: "t4", displayName: "Engels 4B" }, { id: "t5", displayName: "Wiskunde 4B" }, { id: "t6", displayName: "Keuzevak Film" }
+  ],
+  members: {
+    t1: ["a", "b", "c", "d"].map((x) => ({ id: x, displayName: x.toUpperCase() })),
+    t2: ["a", "b", "c", "d", "z"].map((x) => ({ id: x, displayName: x.toUpperCase() })),
+    t3: ["a", "b", "c"].map((x) => ({ id: x, displayName: x.toUpperCase() })),
+    t4: ["e", "f", "g", "h"].map((x) => ({ id: x, displayName: x.toUpperCase() })),
+    t5: ["e", "f", "g", "h", "a"].map((x) => ({ id: x, displayName: x.toUpperCase() })),
+    t6: ["a", "e", "q"].map((x) => ({ id: x, displayName: x.toUpperCase() }))
+  },
+  assignments: [], submissions: {}, namen: {}
+};
+const K = A.klassen(sch);
+assert.deepEqual(K.klassen.map((k) => k.naam), ["4A", "4B", "Keuzevak Film"]);
+assert.deepEqual(K.klassen[0].teams.map((t) => t.id), ["t1", "t3", "t2"]); // op naam: Engels, Nederlands, Wiskunde
+assert.deepEqual(K.klassen[1].teams.map((t) => t.id), ["t4", "t5"]);
+assert.equal(K.klasVan.a, "4A");            // a zit in 3 teams van 4A en 1 van 4B
+assert.equal(K.klasVan.e, "4B");
+assert.equal(K.klasVan.z, "4A");
+assert.equal(K.klasVan.q, "Keuzevak Film");
+assert.equal(K.teamKlas.t5, "4B");
+assert.equal(K.klassen[0].leerlingen.length, 5); // a, b, c, d, z
+// Met een patroon voor de klascode gaat de naam en de groepering op de code.
+const K2 = A.klassen({ ...sch, classes: [{ id: "t1", displayName: "EN-4A" }, { id: "t2", displayName: "WI-4A" }, { id: "t4", displayName: "EN-4B" }] }, { patroon: "\\b(\\d[A-Z])\\b" });
+assert.deepEqual(K2.klassen.map((k) => [k.naam, k.teams.length]), [["4A", 2], ["4B", 1]]);
+// Klas komt terug in de leerlingrijen van bouw().
+const r2 = A.bouw(data, { periode: "schooljaar", nu, klasVan: { u1: "4A" } });
+assert.equal(r2.leerlingen.find((l) => l.id === "u1").klas, "4A");
+
 console.log("analyse.test.js: alles in orde");

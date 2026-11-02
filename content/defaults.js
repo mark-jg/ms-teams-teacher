@@ -2,7 +2,7 @@
  * Eén plek bewerken is genoeg. */
 globalThis.TT_DEFAULTS = {
   panel: { enabled: true, position: "right", handle: true },
-  opdrachten: { enabled: true, periode: "schooljaar", drempelOntbreekt: 2, drempelTeLaat: 3, cacheUren: 6, gearchiveerd: false },
+  opdrachten: { enabled: true, periode: "schooljaar", drempelOntbreekt: 2, drempelTeLaat: 3, cacheUren: 6, gearchiveerd: false, klascodePatroon: "" },
   inspector: { enabled: true },
   developer: { enabled: false },
   updates: { check: true },

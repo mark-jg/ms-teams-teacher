@@ -105,7 +105,7 @@
 
     const klassenUit = [...perKlas.values()].map((k) => ({ ...afronden(k), leerlingen: k.leerlingen.size })).sort((a, b) => a.naam.localeCompare(b.naam, "nl"));
     const leerlingenUit = [...perLeerling.values()].map((l) => ({
-      ...afronden(l), klassen: [...l.klassen].sort((a, b) => a.localeCompare(b, "nl")), aantalKlassen: l.klassen.size,
+      ...afronden(l), klas: opties.klasVan?.[l.id] || "", klassen: [...l.klassen].sort((a, b) => a.localeCompare(b, "nl")), aantalKlassen: l.klassen.size,
       perKlas: [...(leerlingKlas.get(l.id)?.values() || [])].map(afronden).sort((a, b) => a.klas.localeCompare(b.klas, "nl")),
       opdrachten: (details.get(l.id) || []).sort((a, b) => (b.due || 0) - (a.due || 0))
     })).sort((a, b) => a.naam.localeCompare(b.naam, "nl"));
@@ -126,22 +126,91 @@
 
   /* Tabellen voor Excel: [[bladnaam, rijen]] */
   function naarTabellen(r, fmt = { d: (t) => (t ? new Date(t).toISOString().slice(0, 10) : ""), p: (x) => (x == null ? "" : Math.round(x * 100) + "%") }) {
-    const K = [["Klas", "Code", "Leerlingen", "Opdrachten", "Toegewezen", "Ingeleverd", "% ingeleverd", "Op tijd", "Te laat", "Ontbreekt", "Open", "Nagekeken", "Na te kijken", "Gemiddeld"],
+    const K = [["Team", "Code", "Leerlingen", "Opdrachten", "Toegewezen", "Ingeleverd", "% ingeleverd", "Op tijd", "Te laat", "Ontbreekt", "Open", "Nagekeken", "Na te kijken", "Gemiddeld"],
       ...r.klassen.map((k) => [k.naam, k.code, k.leerlingen, k.opdrachten, k.toegewezen, k.ingeleverd, fmt.p(k.pctIngeleverd), k.opTijd, k.teLaat, k.ontbreekt, k.open, k.nagekeken, k.nakijken, fmt.p(k.gemiddeld)])];
-    const L = [["Leerling", "Klassen", "Aantal klassen", "Toegewezen", "Ingeleverd", "% ingeleverd", "Op tijd", "Te laat", "Ontbreekt", "Open", "Nagekeken", "Gemiddeld", "Laatste inlevering"],
-      ...r.leerlingen.map((l) => [l.naam, l.klassen.join(", "), l.aantalKlassen, l.toegewezen, l.ingeleverd, fmt.p(l.pctIngeleverd), l.opTijd, l.teLaat, l.ontbreekt, l.open, l.nagekeken, fmt.p(l.gemiddeld), fmt.d(l.laatste)])];
-    const LK = [["Leerling", "Klas", "Toegewezen", "Ingeleverd", "Te laat", "Ontbreekt", "Open", "Nagekeken", "Gemiddeld"],
+    const L = [["Leerling", "Klas", "Teams", "Aantal teams", "Toegewezen", "Ingeleverd", "% ingeleverd", "Op tijd", "Te laat", "Ontbreekt", "Open", "Nagekeken", "Gemiddeld", "Laatste inlevering"],
+      ...r.leerlingen.map((l) => [l.naam, l.klas, l.klassen.join(", "), l.aantalKlassen, l.toegewezen, l.ingeleverd, fmt.p(l.pctIngeleverd), l.opTijd, l.teLaat, l.ontbreekt, l.open, l.nagekeken, fmt.p(l.gemiddeld), fmt.d(l.laatste)])];
+    const LK = [["Leerling", "Team", "Toegewezen", "Ingeleverd", "Te laat", "Ontbreekt", "Open", "Nagekeken", "Gemiddeld"],
       ...r.leerlingen.flatMap((l) => l.perKlas.map((k) => [l.naam, k.klas, k.toegewezen, k.ingeleverd, k.teLaat, k.ontbreekt, k.open, k.nagekeken, fmt.p(k.gemiddeld)]))];
-    const O = [["Klas", "Opdracht", "Deadline", "Toegewezen", "Ingeleverd", "Te laat", "Ontbreekt", "Open", "Nagekeken", "Na te kijken", "Max. punten", "Gemiddeld"],
+    const O = [["Team", "Opdracht", "Deadline", "Toegewezen", "Ingeleverd", "Te laat", "Ontbreekt", "Open", "Nagekeken", "Na te kijken", "Max. punten", "Gemiddeld"],
       ...r.opdrachten.map((o) => [o.klas, o.naam, fmt.d(o.due), o.toegewezen, o.ingeleverd, o.teLaat, o.ontbreekt, o.open, o.nagekeken, o.nakijken, o.max ?? "", fmt.p(o.gemiddeld)])];
-    const D = [["Leerling", "Klas", "Opdracht", "Deadline", "Status", "Te laat", "Ingeleverd op", "Punten", "Max", "Percentage"],
+    const D = [["Leerling", "Team", "Opdracht", "Deadline", "Status", "Te laat", "Ingeleverd op", "Punten", "Max", "Percentage"],
       ...r.leerlingen.flatMap((l) => l.opdrachten.map((o) => [l.naam, o.klas, o.opdracht, fmt.d(o.due), o.klasse, o.teLaat ? "ja" : "", fmt.d(o.ingeleverdOp), o.punten ?? "", o.max ?? "", fmt.p(o.pct)]))];
-    const S = [["Leerling", "Klassen", "Ontbreekt", "Te laat", "Signaal", "Klassen met probleem"],
-      ...r.signalen.map((s) => [s.naam, s.klassen.join(", "), s.ontbreekt, s.teLaat, s.redenen.join(", "), s.klassenMetProbleem.join(", ")])];
-    return [["Klassen", K], ["Leerlingen", L], ["Leerling per klas", LK], ["Opdrachten", O], ["Signalen", S], ["Alle inleveringen", D]];
+    const S = [["Leerling", "Klas", "Teams", "Ontbreekt", "Te laat", "Signaal", "Teams met probleem"],
+      ...r.signalen.map((s) => [s.naam, s.klas, s.klassen.join(", "), s.ontbreekt, s.teLaat, s.redenen.join(", "), s.klassenMetProbleem.join(", ")])];
+    return [["Teams", K], ["Leerlingen", L], ["Leerling per team", LK], ["Opdrachten", O], ["Signalen", S], ["Alle inleveringen", D]];
   }
 
-  const API = { bouw, beoordeel, periodeBereik, naarTabellen };
+  /* ---------- Klassen afleiden ----------
+   * Op scholen met een team per vak is de klas niet één team maar een groep leerlingen die samen in
+   * dezelfde teams zitten. Twee signalen:
+   *  1. klascode in de teamnaam (opties.patroon, een regex met één groep, bv. "\\b(\\d[A-Z]{1,3}\\d?)\\b");
+   *  2. overlap in lidmaatschap: twee teams horen bij dezelfde klas als het kleinste team voor minstens
+   *     opties.drempel (0.5) uit dezelfde leerlingen bestaat, met minstens opties.minLeerlingen (3) gemeenschappelijk.
+   * Elke leerling krijgt de klas waarvan die de meeste teams volgt.
+   * Geeft { klassen: [{ id, naam, teams: [{ id, naam }], leerlingen: [{ id, naam, teams }] }], klasVan: { [uid]: klasnaam }, teamKlas: { [teamId]: klasnaam } } */
+  function klassen(data, opties = {}) {
+    const drempel = opties.drempel ?? 0.5, minL = opties.minLeerlingen ?? 3;
+    const teams = (data.classes || []).filter((c) => !opties.teams || opties.teams.has(c.id));
+    const naam = (uid) => data.namen?.[uid] || Object.values(data.members || {}).flat().find((m) => m.id === uid)?.displayName || uid;
+    // Leerlingen per team: leden plus iedereen met een inlevering in een opdracht van dat team.
+    const leden = new Map();
+    for (const t of teams) leden.set(t.id, new Set((data.members?.[t.id] || []).map((m) => m.id)));
+    for (const a of data.assignments || []) { const set = leden.get(a.classId); if (!set) continue; for (const s of data.submissions?.[a.id] || []) if (s.recipient?.userId) set.add(s.recipient.userId); }
+    // Union-find over teams.
+    const ouder = new Map(teams.map((t) => [t.id, t.id]));
+    const vind = (x) => { while (ouder.get(x) !== x) { ouder.set(x, ouder.get(ouder.get(x))); x = ouder.get(x); } return x; };
+    const voeg = (a, b) => { a = vind(a); b = vind(b); if (a !== b) ouder.set(a, b); };
+    let re = null; try { if (opties.patroon) re = new RegExp(opties.patroon, "i"); } catch {}
+    const code = (t) => { if (!re) return null; const m = re.exec(t.displayName || ""); return m ? (m[1] || m[0]).toUpperCase() : null; };
+    // 1. Zelfde klascode in de naam → zelfde klas.
+    const perCode = new Map();
+    for (const t of teams) { const c = code(t); if (c) { if (perCode.has(c)) voeg(t.id, perCode.get(c)); else perCode.set(c, t.id); } }
+    // 2. Overlap in lidmaatschap (alleen teams zonder herkende code, of als er geen patroon is).
+    const los = teams.filter((t) => !code(t));
+    for (let i = 0; i < los.length; i++) for (let j = i + 1; j < los.length; j++) {
+      const A = leden.get(los[i].id), B = leden.get(los[j].id);
+      if (!A.size || !B.size) continue;
+      let n = 0; for (const x of A) if (B.has(x)) n++;
+      if (n >= minL && n / Math.min(A.size, B.size) >= drempel) voeg(los[i].id, los[j].id);
+    }
+    // Groepen samenstellen.
+    const groepen = new Map();
+    for (const t of teams) { const r = vind(t.id); if (!groepen.has(r)) groepen.set(r, []); groepen.get(r).push(t); }
+    const STOP = /^(team|klas|class|groep|vak|les|en|de|het|van|\d{4}|\d{2}-\d{2}|\d{4}-\d{4}|\d{4}-\d{2})$/i;
+    const tokens = (n) => String(n || "").split(/[^\p{L}\p{N}]+/u).filter((x) => x.length >= 2 && !STOP.test(x));
+    const benoem = (ts) => {
+      const c = code(ts[0]); if (c && ts.every((t) => code(t) === c)) return c;
+      if (ts.length === 1) return ts[0].displayName;
+      const tel = new Map();
+      for (const t of ts) for (const x of new Set(tokens(t.displayName).map((y) => y.toUpperCase()))) tel.set(x, (tel.get(x) || 0) + 1);
+      const gemeen = [...tel.entries()].filter(([, n]) => n >= Math.max(2, Math.ceil(ts.length * 0.6))).map(([x]) => x);
+      const metCijfer = gemeen.filter((x) => /\d/.test(x));
+      const keus = (metCijfer.length ? metCijfer : gemeen).sort((a, b) => a.length - b.length || a.localeCompare(b))[0];
+      return keus || ts.map((t) => t.displayName).sort()[0];
+    };
+    const uit = [];
+    for (const ts of groepen.values()) {
+      const telPer = new Map();
+      for (const t of ts) for (const u of leden.get(t.id)) telPer.set(u, (telPer.get(u) || 0) + 1);
+      uit.push({ teams: ts.map((t) => ({ id: t.id, naam: t.displayName })).sort((a, b) => a.naam.localeCompare(b.naam, "nl")), telPer, naam: benoem(ts) });
+    }
+    // Dubbele namen uniek maken.
+    const gezien = new Map();
+    for (const g of uit) { const n = gezien.get(g.naam) || 0; gezien.set(g.naam, n + 1); if (n) g.naam = `${g.naam} (${n + 1})`; }
+    uit.sort((a, b) => a.naam.localeCompare(b.naam, "nl", { numeric: true }));
+    uit.forEach((g, i) => { g.id = "k" + i; });
+    // Leerling → klas met de meeste teams (bij gelijk: de grootste klas).
+    const beste = new Map();
+    for (const g of uit) for (const [u, n] of g.telPer) { const b = beste.get(u); if (!b || n > b.n || (n === b.n && g.telPer.size > b.g.telPer.size)) beste.set(u, { n, g }); }
+    const klasVan = {}, teamKlas = {};
+    for (const g of uit) { g.leerlingen = []; for (const t of g.teams) teamKlas[t.id] = g.naam; }
+    for (const [u, b] of beste) { klasVan[u] = b.g.naam; b.g.leerlingen.push({ id: u, naam: naam(u), teams: b.n }); }
+    for (const g of uit) { g.leerlingen.sort((a, b) => a.naam.localeCompare(b.naam, "nl")); delete g.telPer; }
+    return { klassen: uit, klasVan, teamKlas };
+  }
+
+  const API = { bouw, beoordeel, periodeBereik, naarTabellen, klassen };
   globalThis.TT_ANALYSE = API;
   if (typeof module !== "undefined" && module.exports) module.exports = API;
 })();

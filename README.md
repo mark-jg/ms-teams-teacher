@@ -1,4 +1,4 @@
-# Docent Tools voor Teams (v0.2.0)
+# Docent Tools voor Teams (v0.3.0)
 
 Chrome-extensie voor Microsoft Teams (web) voor docenten: team-overstijgende analyses van opdrachten. Alles draait lokaal in je browser; er wordt niets naar een eigen server gestuurd. Zusje van [Docent Tools voor Magister](https://github.com/mark-jg/magister-docent), met dezelfde opzet.
 
@@ -17,7 +17,7 @@ Werkt ook in Edge (`edge://extensions`). Bijwerken gaat zoals bij de Magister-ex
 
 | Functie | Hoe |
 |---|---|
-| **Opdrachten over alle teams**: per klas, per leerling (over al je klassen heen), per opdracht, komende deadlines, nakijkwerk en signalen | Alt+O, of via het zijpaneel of het extensie-icoon |
+| **Opdrachten over alle teams**: per klas (afgeleid uit wie samen in dezelfde teams zit), per team, per leerling (over al je teams heen), per opdracht, komende deadlines, nakijkwerk en signalen | Alt+O, of via het zijpaneel of het extensie-icoon |
 | Export naar Excel: het geopende tabblad of alles in één werkmap (zes bladen, inclusief alle inleveringen) | knoppen bovenin het overzicht |
 | Filters: klassen (automatisch of zelf gekozen, wordt onthouden), periode (schooljaar, 90 dagen, 30 dagen, alles), "Alleen problemen", zoeken; sorteren door op een kolomkop te klikken | bovenin het overzicht |
 | Zijpaneel met status van de koppeling, modules aan/uit en thema | Alt+K of het handvat |
@@ -32,7 +32,13 @@ Per klas en per leerling wordt geteld: toegewezen, ingeleverd (en of dat op tijd
 - **Nakijken** laat zien wat er over alle klassen op je ligt te wachten, langst wachtende bovenaan.
 - **Signalen** zijn leerlingen die over alle klassen opgeteld boven een drempel komen (standaard 2× ontbreekt of 3× te laat; instelbaar). De kolom "In klassen" laat zien of het in één vak speelt of breder.
 
-### Welke klassen tellen mee
+### Klassen bij een team per vak
+
+Op scholen met een team per vak is de klas niet één team. De extensie leidt klassen daarom af uit **wie samen in dezelfde teams zit**: twee teams horen bij dezelfde klas als het kleinste team voor minstens de helft uit dezelfde leerlingen bestaat (en minstens drie gemeenschappelijk). Elke leerling krijgt de klas waarvan die de meeste teams volgt; een leerling die in 4A zit en één keuzevak met 4B deelt, blijft dus 4A. De klas krijgt als naam het woord dat de teamnamen gemeen hebben, bij voorkeur met een cijfer erin (bijvoorbeeld "4A" uit "Engels 4A" en "Wiskunde 4A").
+
+Staat de klascode in de teamnaam, vul dan in de instellingen een **klascodepatroon** in (regex met één groep): teams met dezelfde code vormen dan zeker één klas met die naam, en de overlap-regel doet de rest. Het tabblad **Klassen** toont per klas de teams, de klaslijst (klik op de rij) en de totalen; de keuzelijst **Klas** bovenin beperkt alle tabbladen tot één klas; de kolom Klas staat ook bij Leerlingen en Signalen en in de Excel-bladen Klassen en Klasindeling.
+
+### Welke teams tellen mee
 
 Standaard bepaalt de extensie dat automatisch met vier signalen uit Graph: is het een **klasteam** (teamtype Klas), is het **gearchiveerd**, ben jij **eigenaar**, en hoort het bij **dit schooljaar** (team aangemaakt sinds juni vóór het schooljaar, of opdrachten met een datum in dit schooljaar). Alleen eigen, actieve klasteams van dit jaar tellen mee; bovenin staat hoeveel er verborgen zijn en waarom. Via **Klassen** kies je zelf (zoekveld, vinkjes, Alles, Niets); die keuze wordt onthouden tot je weer op Automatisch klikt. Gearchiveerde teams worden standaard niet eens opgehaald (instelbaar), en opdrachten van vóór het vorige schooljaar vallen weg.
 
@@ -72,6 +78,7 @@ Het zijpaneel toont onder **Koppeling** wat er aan de hand is:
 
 ## Wijzigingen
 
+- 0.3.0: klassen afgeleid uit lidmaatschap (wie samen in dezelfde teams zit) en optioneel uit een klascode in de teamnaam; nieuw tabblad Klassen met klaslijsten, kolom Klas bij Leerlingen en Signalen, keuzelijst Klas als filter, Excel-bladen Klassen en Klasindeling; het oude tabblad Klassen heet nu Teams.
 - 0.2.0: klassen automatisch bepaald (klasteam, niet gearchiveerd, eigenaar, dit schooljaar) met een klassenkiezer die de keuze onthoudt; schakelaar Alleen problemen; betere standaardvolgorde per tabblad; filters en tabblad worden onthouden; gearchiveerde teams en opdrachten van vóór het vorige schooljaar worden niet meer opgehaald.
 - 0.1.1: werkt met het Graph-token van de app Opdrachten (EduAssignments zonder EduRoster): klassen via de teams-lijst, leden via groepsleden; de extensie wacht tot de app Opdrachten open is en kiest het juiste frame op scopes; status in het zijpaneel legt uit wat er mist.
 - 0.1.0: eerste versie. Opdrachten over alle teams (klassen, leerlingen, opdrachten, deadlines, nakijken, signalen) via Microsoft Graph met het token van Teams zelf; Excel-export; zijpaneel met koppelingsstatus; Inspector; zelf bijwerken via GitHub Releases.
