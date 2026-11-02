@@ -4,7 +4,7 @@ globalThis.TT_DEFAULTS = {
   panel: { enabled: true, position: "right", handle: true },
   opdrachten: { enabled: true, periode: "schooljaar", drempelOntbreekt: 2, drempelTeLaat: 3, cacheUren: 24, volledigDagen: 7, schooljaren: 2, gearchiveerd: false, alleTeams: false, klascodePatroon: "" }, // leeg = standaardpatroon (TT_KLASCODE), klascode vóór het streepje
   /* Rapporten: periodes "naam | begin | einde" per regel; opleidingen "CODE = Naam"; vakgroepen "Groep: vak, vak". */
-  rapport: { ingesteld: false, periodes: "", opleidingen: "", vakgroepen: "", cesuur: 55, afronding: "heel", titel: "Resultaten jaar {jaar}", toelichting: "" },
+  rapport: { ingesteld: false, thema: "magenta", school: "Mediacollege Amsterdam", periodes: "", opleidingen: "", vakgroepen: "", cesuur: 55, afronding: "heel", titel: "Resultaten jaar {jaar}", toelichting: "" },
   inspector: { enabled: true },
   developer: { enabled: false },
   updates: { check: true },
@@ -33,3 +33,11 @@ globalThis.TT_RAPPORT_STANDAARD = {
   avo: /rekenen|engels|nederlands|burgerschap|\bbur\b|loopbaan|\bslb\b|duits|frans|spaans|wiskunde|keuzedeel|lob/i,
   toelichting: "De student krijgt in periode 2 een positief studieadvies als: minimaal vier van de vijf praktijkvakken zijn behaald met een voldoende, minimaal vier van de vijf AVO-vakken/BUR zijn behaald met een voldoende en de aanwezigheid 80% of meer is. Als de student niet voldoet aan deze voorwaarden, dan wordt het studieadvies door het docententeam bepaald."
 };
+/* Thema's voor de rapporten: [id, naam, omschrijving]. */
+globalThis.TT_RAPPORT_THEMAS = [
+  ["magenta", "Zwart/magenta", "Huisstijl Mediacollege Amsterdam, met logo"],
+  ["blauw", "Blauw", "Algemeen, rustig blauw"],
+  ["groen", "Groen", "Algemeen, groen"],
+  ["grijs", "Grijs", "Algemeen, neutraal zonder accentkleur"],
+  ["warm", "Warm", "Algemeen, terracotta"]
+];

@@ -79,8 +79,8 @@
     <label class="row">Afronding <select data-path="rapport.afronding"><option value="heel">Hele cijfers</option><option value="decimaal">Eén decimaal</option></select></label>
     <label class="row">Titel <input type="text" data-path="rapport.titel" style="flex:1"> </label>
     <p>{jaar}, {klas}, {cohort} en {schooljaar} worden ingevuld.</p>
-    <label class="row">Logo op het rapport <input type="file" id="logoBestand" accept="image/png,image/jpeg,image/svg+xml"> <button id="logoWissen">Wissen</button> <span id="logoStatus" style="font-size:13px;color:var(--muted)"></span></label>
-    <p>Kies het officiële logo (horizontaal, kleur op wit) uit de huisstijlmap; het blijft lokaal in de extensie bewaard. Zonder keuze gebruikt het rapport <code>rapport/ma-logo.jpg</code> uit de extensiemap als dat bestand er staat, en anders het woordmerk als tekst.</p>
+    <label class="row">Thema <select data-path="rapport.thema"><option value="magenta">Zwart/magenta (Mediacollege Amsterdam, met logo)</option><option value="blauw">Blauw</option><option value="groen">Groen</option><option value="grijs">Grijs</option><option value="warm">Warm</option></select></label>
+    <label class="row">Schoolnaam (bij de algemene thema's) <input type="text" data-path="rapport.school" style="flex:1"></label>
     <label class="row" style="align-items:flex-start">Toelichting<textarea data-path="rapport.toelichting" placeholder="Bijvoorbeeld: de student krijgt in periode 2 een positief studieadvies als…" style="flex:1;min-height:90px"></textarea></label>
   </section>
 

@@ -1,4 +1,4 @@
-# Docent Tools voor Teams (v0.5.1)
+# Docent Tools voor Teams (v0.6.0)
 
 Chrome-extensie voor Microsoft Teams (web) voor docenten: team-overstijgende analyses van opdrachten. Alles draait lokaal in je browser; er wordt niets naar een eigen server gestuurd. Zusje van [Docent Tools voor Magister](https://github.com/mark-jg/magister-docent), met dezelfde opzet.
 
@@ -17,12 +17,14 @@ Werkt ook in Edge (`edge://extensions`). Na elke update of herlaad van de extens
 
 | Functie | Hoe |
 |---|---|
-| **Opdrachten over alle teams**: per klas (afgeleid uit wie samen in dezelfde teams zit), per team, per leerling (over al je teams heen), per opdracht, komende deadlines, nakijkwerk en signalen | Alt+O, of via het zijpaneel of het extensie-icoon |
-| **Cijfers**: per leerling het gemiddelde per team, gewogen volgens de cijfercategorieën van dat team, plus een totaal; klik voor categorieën en opdrachten | tabblad Cijfers |
-| **Rubrics**: rubric-rijen die in meerdere opdrachten of teams voorkomen, met per leerling het gekozen niveau over al die voorkomens | tabblad Rubrics |
-| **Rapporten**: per leerling een A4-rapport met cijfers per vak per periode, studentnummer, klas, opleiding, cohort en leerjaar, afdrukbaar (ook naar PDF) in de huisstijl van Mediacollege Amsterdam; opmerkingen per periode typ je in het rapport zelf | knop Rapporten in het overzicht |
-| Export naar Excel: het geopende tabblad of alles in één werkmap (zes bladen, inclusief alle inleveringen) | knoppen bovenin het overzicht |
-| Filters: klassen (automatisch of zelf gekozen, wordt onthouden), periode (schooljaar, 90 dagen, 30 dagen, alles), "Alleen problemen", zoeken; sorteren door op een kolomkop te klikken | bovenin het overzicht |
+| **Overzicht met doorklikken** (Alt+O): start met je werk (na te kijken, deadlines, signalen) en je klassen; klik door naar een klas, een vak (team) of een leerling | Alt+O, zijpaneel of extensie-icoon |
+| **Klas**: leerlingen en vakken van die klas, komende deadlines | klik op een klas |
+| **Vak (team)**: opdrachten met inleverstand, klik op een opdracht voor de stand per leerling; leerlingen van dat vak | klik op een vak |
+| **Leerling**: per vak het (gewogen) gemiddelde, ontbrekend en te laat werk, de opdrachten, gedeelde rubric-rijen, signaal | klik op een leerling of zoek de naam |
+| **Rapporten**: per leerling een A4-rapport met cijfers per vak per periode, studentnummer, klas, opleiding, cohort en leerjaar; thema Zwart/magenta (huisstijl Mediacollege Amsterdam) of een algemeen thema; opmerkingen typ je in het rapport | knop Rapporten, ook per klas en per leerling |
+| **Rubrics**: rubric-rijen die in meerdere opdrachten of vakken voorkomen, met per leerling het gekozen niveau | via het startscherm of een leerling |
+| Zoeken naar leerling, vak of klas; periode (schooljaar, 90 dagen, 30 dagen, alles); welke teams meetellen (automatisch of zelf gekozen) | bovenin het overzicht |
+| Export naar Excel: alle overzichten in één werkmap (teams, leerlingen, opdrachten, signalen, klassen, cijfers, rubrics, inleveringen) | knop Excel |
 | Zijpaneel met status van de koppeling, modules aan/uit en thema | Alt+K of het handvat |
 | Inspector (ontwikkelaarsmodus): frames, tokens (alleen host en scopes), API-calls van Teams | zijpaneel > Ontwikkelaar |
 
@@ -62,7 +64,7 @@ De knop **Rapporten** opent een keuzevenster: klassen, periodes en afronding. **
 - Per vak (teamnaam zonder klascode) het cijfer per periode: het gewogen gemiddelde van de opdrachten met een deadline in die periode, omgerekend naar een cijfer met de cesuur (standaard 55% = 5,5, lineair naar 1 en 10). Onvoldoendes in magenta. Vakken zijn te groeperen (bijvoorbeeld Praktijkvakken en AVO-vakken).
 - Een vaste toelichting en per periode een vak voor opmerkingen, dat je in het rapport typt; opmerkingen worden per leerling en periode bewaard.
 
-Er is een **standaardsjabloon** dat meteen werkt: vier periodes per schooljaar in leerjaarnotatie (Periode 1.1 t/m 1.4 voor een eerstejaars, 2.1 t/m 2.4 voor een tweedejaars), opleidingen MR en MIP, vakken automatisch in Praktijkvakken of AVO-vakken en BUR (herkend op naam), cesuur 55%, hele cijfers en de toelichting over het studieadvies. De eerste keer dat je op Rapporten klikt opent een **wizard** in vijf stappen (periodes, opleidingen, vakken, cijfers en tekst, logo), vooraf ingevuld uit je teams: gevonden opleidingscodes, gevonden vakken. Alles is later aan te passen via de knop Wizard of bij Instellingen › Rapporten. De opmaak volgt het Mediacollege Design System: wit, zwart en magenta als enig accent, dunne hairlines, tekstkaders; Aeonik is een gelicentieerd lettertype, dus de pagina gebruikt de voorgeschreven vervanging Arial (en Georgia voor de titel). Het logo is ook een merkbestand en zit niet in deze repo: kies het bij Instellingen › Rapporten (blijft lokaal), of zet het officiële horizontale logo als `rapport/ma-logo.jpg` in de extensiemap; anders staat het woordmerk als tekst. Aanwezigheid staat niet in Teams en dus niet op het rapport.
+Er is een **standaardsjabloon** dat meteen werkt: vier periodes per schooljaar in leerjaarnotatie (Periode 1.1 t/m 1.4 voor een eerstejaars, 2.1 t/m 2.4 voor een tweedejaars), opleidingen MR en MIP, vakken automatisch in Praktijkvakken of AVO-vakken en BUR (herkend op naam), cesuur 55%, hele cijfers en de toelichting over het studieadvies. De eerste keer dat je op Rapporten klikt opent een **wizard** in vijf stappen (periodes, opleidingen, vakken, cijfers en tekst, logo), vooraf ingevuld uit je teams: gevonden opleidingscodes, gevonden vakken. Alles is later aan te passen via de knop Wizard of bij Instellingen › Rapporten. Het thema **Zwart/magenta** volgt het Mediacollege Design System: wit, zwart en magenta als enig accent, dunne hairlines, tekstkaders en het logo; Aeonik is een gelicentieerd lettertype, dus de pagina gebruikt de voorgeschreven vervanging Arial (en Georgia voor de titel). Daarnaast zijn er algemene thema's (Blauw, Groen, Grijs, Warm) die de schoolnaam tonen in plaats van het logo. Het thema kies je in de wizard, in het keuzevenster of bij Instellingen › Rapporten. Aanwezigheid staat niet in Teams en dus niet op het rapport.
 
 Concept- en ingeplande opdrachten tellen niet mee. Vrijstelling (excused) telt niet als ontbrekend en niet mee in het gemiddelde.
 
@@ -102,6 +104,7 @@ Het zijpaneel toont onder **Koppeling** wat er aan de hand is:
 
 ## Wijzigingen
 
+- 0.6.0: overzicht herbouwd als pagina's waarin je doorklikt (start met je werk en klassen › klas › vak of leerling), met zoeken; veel minder getallen in beeld, de tabbladen zijn weg (alles blijft in de Excel-export). Rapportthema's: Zwart/magenta (Mediacollege, met logo) en vier algemene; logo zit in de extensie.
 - 0.5.1: standaardsjabloon voor rapporten (vier periodes in leerjaarnotatie, MR/MIP, vakken automatisch gegroepeerd, toelichting) en een wizard in vijf stappen die bij de eerste klik op Rapporten opent, vooraf ingevuld uit je teams; periodes als MM-DD volgen elk schooljaar.
 - 0.5.0: rapporten per leerling (cijfers per vak per periode, studentnummer uit het e-mailadres, klas, opleiding, cohort, leerjaar, opmerkingen per periode), afdrukbaar in de huisstijl van Mediacollege Amsterdam en naar Excel; instellingen voor periodes, opleidingen, vakgroepen, cesuur, afronding, titel en toelichting; e-mailadres en naamdelen van leerlingen worden meegehaald (eerste keer bijwerken haalt leden opnieuw op).
 - 0.4.0: tabblad Cijfers (gemiddelde per leerling per team, gewogen volgens de cijfercategorieën, met totaal en detail per categorie) en tabblad Rubrics (gelijke rubric-rijen over opdrachten en teams heen, met per leerling het gekozen niveau); Excel-bladen Cijfers, Cijfers per categorie, Rubric-rijen en Rubric-niveaus per leerling. Eerste keer bijwerken haalt alles opnieuw op.

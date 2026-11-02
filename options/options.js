@@ -74,15 +74,3 @@ document.getElementById("ghTokenClear").onclick = async () => {
   await chrome.runtime.sendMessage({ type: "setToken", token: "" }).catch(() => null);
 };
 load();
-
-/* Logo voor het rapport: als data-URL in chrome.storage.local (alleen dit apparaat). */
-const logoVeld = document.getElementById("logoBestand"), logoStatus = document.getElementById("logoStatus");
-chrome.storage.local.get("ttLogo").then(({ ttLogo }) => { logoStatus.textContent = ttLogo ? "Eigen logo ingesteld." : "Geen eigen logo gekozen."; });
-logoVeld.onchange = () => {
-  const f = logoVeld.files?.[0]; if (!f) return;
-  if (f.size > 600000) { logoStatus.textContent = "Bestand is groter dan 600 kB; kies een kleinere versie."; return; }
-  const r = new FileReader();
-  r.onload = async () => { await chrome.storage.local.set({ ttLogo: String(r.result) }); logoStatus.textContent = `Logo opgeslagen (${f.name}).`; };
-  r.readAsDataURL(f);
-};
-document.getElementById("logoWissen").onclick = async () => { await chrome.storage.local.remove("ttLogo"); logoVeld.value = ""; logoStatus.textContent = "Eigen logo gewist."; };

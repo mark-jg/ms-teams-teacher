@@ -28,12 +28,11 @@ html, body { margin: 0; background: #ECECEC; color: var(--ink); font: 14px/1.55 
 .pagina[hidden] { display: none; }
 .kop { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding-bottom: 14px; border-bottom: 1px solid var(--line-strong); }
 .kop img { height: 44px; width: auto; display: block; }
-.woordmerk { font: 500 18px/1.1 var(--font-sans); color: var(--ma-magenta); padding-top: 10px; }
+.woordmerk { font: 500 18px/1.1 var(--font-sans); color: var(--accent, var(--ma-magenta)); padding-top: 10px; }
 .kop-rechts { text-align: right; }
 .opleiding { font: 400 24px/1.1 var(--font-display); letter-spacing: -.01em; margin: 0; }
 .opleiding small { display: block; font: 500 11px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-muted); margin-bottom: 6px; }
-.kader { display: inline-block; font: 500 15px/1.2 var(--font-sans); color: #fff; background: var(--ma-black); padding: 5px 9px; border-radius: var(--radius-kader); margin-top: 8px; }
-.kader.magenta { background: var(--ma-magenta); }
+.kader { display: inline-block; font: 500 15px/1.2 var(--font-sans); color: #fff; background: var(--kader-bg, var(--ma-black)); padding: 5px 9px; border-radius: var(--radius-kader); margin-top: 8px; }
 
 .gegevens { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 20px; font-size: 13px; }
 .gegevens div { border-bottom: 1px solid var(--line); padding-bottom: 6px; }
@@ -46,12 +45,12 @@ table.cijfers th, table.cijfers td { padding: 8px 10px; border-bottom: 1px solid
 table.cijfers th { font-weight: 500; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-muted); border-bottom: 1px solid var(--line-strong); }
 table.cijfers th.p, table.cijfers td.p { text-align: center; width: 26mm; font-variant-numeric: tabular-nums; }
 table.cijfers td.p { font-weight: 500; font-size: 16px; }
-table.cijfers td.p.onv { color: var(--ma-magenta); }
+table.cijfers td.p.onv { color: var(--accent, var(--ma-magenta)); }
 table.cijfers td.p.geen { color: var(--ink-muted); font-weight: 400; font-size: 13px; }
 table.cijfers td .n { display: block; font-size: 10.5px; color: var(--ink-muted); font-weight: 400; }
 table.cijfers td.vak small { display: block; color: var(--ink-muted); font-size: 11px; }
 
-.toelichting { border-left: 3px solid var(--ma-magenta); padding: 2px 0 2px 12px; font-size: 12.5px; color: var(--ink-soft); white-space: pre-wrap; }
+.toelichting { border-left: 3px solid var(--accent, var(--ma-magenta)); padding: 2px 0 2px 12px; font-size: 12.5px; color: var(--ink-soft); white-space: pre-wrap; }
 .opmerkingen { display: flex; flex-direction: column; gap: 12px; }
 .opm h3 { margin: 0 0 6px; font-size: 12.5px; font-weight: 500; }
 .opm [contenteditable] { min-height: 26mm; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-kader); background: var(--paper-soft); font-style: italic; outline: none; white-space: pre-wrap; }
@@ -69,3 +68,11 @@ table.cijfers td.vak small { display: block; color: var(--ink-muted); font-size:
   .opm [contenteditable] { background: #fff; border-color: var(--line-strong); }
   .opm [contenteditable]:empty::before { content: ""; }
 }
+
+/* Thema's. Zwart/magenta is de huisstijl van Mediacollege Amsterdam (met logo); de andere zijn algemeen. */
+body[data-thema="magenta"] { --accent: #FF00E6; --kader-bg: #000; }
+body[data-thema="blauw"] { --accent: #1D4ED8; --kader-bg: #1E3A8A; --font-display: Georgia, "Times New Roman", serif; }
+body[data-thema="groen"] { --accent: #15803D; --kader-bg: #14532D; --font-display: Georgia, "Times New Roman", serif; }
+body[data-thema="grijs"] { --accent: #374151; --kader-bg: #111827; --font-display: Arial, Helvetica, sans-serif; }
+body[data-thema="warm"] { --accent: #C2410C; --kader-bg: #7C2D12; --font-display: Georgia, "Times New Roman", serif; }
+body[data-thema="blauw"] .kop, body[data-thema="groen"] .kop, body[data-thema="grijs"] .kop, body[data-thema="warm"] .kop { border-bottom-color: var(--accent); }

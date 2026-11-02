@@ -8,8 +8,10 @@ let model = null, opmerkingen = {}, timer = null, logo = null;
 /* Logo: eigen upload uit de instellingen (lokaal bewaard), anders rapport/ma-logo.jpg in de extensiemap,
  * anders het woordmerk als tekst. Het officiële logo is een merkbestand en zit niet in de repo. */
 function logoEl() {
+  // Zwart/magenta: het logo van Mediacollege Amsterdam. Andere thema's: de schoolnaam als woordmerk.
+  if ((model?.thema || "magenta") !== "magenta") return el("div", { class: "woordmerk", text: model?.school || "" });
   const img = el("img", { src: logo || "ma-logo.jpg", alt: "Mediacollege Amsterdam" });
-  img.addEventListener("error", () => img.replaceWith(el("div", { class: "woordmerk", text: "Mediacollege Amsterdam" })));
+  img.addEventListener("error", () => img.replaceWith(el("div", { class: "woordmerk", text: model?.school || "Mediacollege Amsterdam" })));
   return img;
 }
 
@@ -71,6 +73,7 @@ function render() {
 
 chrome.storage.local.get(["ttRapport", "ttOpmerkingen", "ttLogo"]).then(({ ttRapport, ttOpmerkingen, ttLogo }) => {
   model = ttRapport || null; opmerkingen = ttOpmerkingen || {}; logo = ttLogo || null;
+  document.body.dataset.thema = model?.thema || "magenta";
   const sel = $("klasFilter");
   for (const k of [...new Set((model?.leerlingen || []).map((l) => l.klas))].sort((a, b) => a.localeCompare(b, "nl", { numeric: true }))) sel.append(el("option", { value: k, text: k }));
   render();
