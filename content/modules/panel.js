@@ -38,19 +38,23 @@ TT.register({
     if (open) { this.refreshStatus(); this._panel.querySelector("button, a")?.focus(); }
   },
 
-  /* Status van de koppeling met Graph: token gevonden, scopes, en of /education/me/classes werkt. */
+  /* Status van de koppeling. Het bruikbare Graph-token zit in het frame van de app Opdrachten
+   * (assignments.edu.cloud.microsoft) en heeft EduAssignments maar geen EduRoster. */
   async refreshStatus() {
     const box = this._panel?.querySelector("#tt-status"); if (!box) return;
-    box.className = "tt-status"; box.querySelector("span:last-child").textContent = "Koppeling controleren…";
+    const set = (cls, txt) => { box.className = `tt-status is-${cls}`; box.querySelector("span:last-child").textContent = txt; };
+    set("", "Koppeling controleren…");
     const info = await TT.tokensInfo();
     const graph = info.flatMap((f) => f.tokens.filter((t) => /graph\.microsoft\.com/.test(t.host)).map((t) => ({ ...t, frame: f.frame })));
     const edu = graph.filter((t) => /EduAssignments/i.test(t.scp));
-    const set = (cls, txt) => { box.className = `tt-status is-${cls}`; box.querySelector("span:last-child").textContent = txt; };
-    if (!graph.length) return set("err", "Nog geen Graph-token gezien in deze pagina. Klik in Teams even op Teams of Opdrachten en probeer opnieuw. Zie de Inspector voor welke frames en hosts er wél zijn.");
-    const r = await TT.graph("/education/me/classes?$select=id,displayName&$top=1");
-    if (r.status === 200) return set("ok", `Koppeling werkt: Graph-token met education-toegang${edu.length ? "" : " (scope niet in het token, maar de aanroep slaagt)"}. ${r.value.length ? "Klassen gevonden." : "Geen klassen gevonden; ben je docent van een klasteam?"}`);
-    if (r.status === 403 || r.status === 401) return set("warn", `Graph-token gevonden (${graph.length}×) maar zonder toegang tot de education-API (HTTP ${r.status}${r.code ? ", " + r.code : ""}). Scopes van het token staan in de Inspector; met die lijst kunnen we een andere route kiezen.`);
-    set("warn", `Graph-token gevonden, maar de proef-aanroep gaf ${r.status || "geen antwoord"}${r.error ? ": " + r.error : ""}.`);
+    if (!edu.length) return set(graph.length ? "warn" : "err", `${graph.length ? "Wel een Graph-token, maar zonder EduAssignments." : "Nog geen Graph-token gezien."} Open in Teams de app Opdrachten (linkerbalk, eventueel via ⋯ Meer apps); daarin zit het token dat de extensie gebruikt. Controleer daarna opnieuw.`);
+    const w = await TT.graphWindow("EduAssignments");
+    if (!w) return set("warn", "Token met EduAssignments gezien, maar het frame antwoordt niet. Herlaad het Teams-tabblad en open Opdrachten opnieuw.");
+    const kl = await TT.graph("/education/me/classes?$select=id,displayName&$top=1");
+    if (kl.status === 200) return set("ok", "Koppeling werkt: education-API met klassenlijst en leden.");
+    const jt = await TT.graph("/me/joinedTeams?$select=id,displayName");
+    if (jt.status === 200) return set("ok", `Koppeling werkt via de teams-lijst (${jt.value.length} teams): opdrachten en inleveringen via de education-API, klassen en leden via Teams-groepen (het token mist EduRoster, HTTP ${kl.status}).`);
+    set("warn", `Token gevonden, maar zowel de klassenlijst (HTTP ${kl.status}) als de teams-lijst (HTTP ${jt.status}) faalt${jt.error ? ": " + jt.error : ""}.`);
   },
 
   render(TT) {

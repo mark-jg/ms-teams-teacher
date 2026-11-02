@@ -149,7 +149,7 @@
       const res = await of(url, { method, headers: { Authorization: `Bearer ${tok.token}`, Accept: "application/json", Prefer: "include-unknown-enum-members", ...(body ? { "Content-Type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
       let json = null, text = ""; try { text = await res.clone().text(); json = JSON.parse(text); } catch {}
       try { record(`${method} (Docent Tools)`, url, res.status, text, performance.now() - t0); } catch {}
-      reply(e, { type: "tt:api:result", id, status: res.status, json, source: tok.source });
+      reply(e, { type: "tt:api:result", id, status: res.status, json, source: tok.source, scp: tok.scp || "" });
     } catch (err) { reply(e, { type: "tt:api:result", id, status: 0, error: String(err && err.message || err) }); }
   });
 

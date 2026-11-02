@@ -15,34 +15,59 @@ TT.register({
   },
   destroy() { this._overlay?.remove(); this._overlay = null; },
 
-  /* ---------- Ophalen ---------- */
+  /* ---------- Ophalen ----------
+   * Het Graph-token met EduAssignments zit alleen in het frame van de app Opdrachten en mist EduRoster.
+   * Daarom: klassen via /education/me/classes als dat mag, anders via de teams-lijst (/me/joinedTeams);
+   * leden via /education/classes/{id}/members als dat mag, anders via groepsleden minus eigenaren. */
   async laden(TT, voortgang = () => {}) {
     if (this._busy) return;
     this._busy = true;
     try {
-      voortgang("Klassen ophalen…", 0);
-      const kl = await TT.graph("/education/me/classes?$select=id,displayName,classCode,externalName,description");
-      if (kl.status !== 200) throw new Error(kl.noToken ? "Geen Graph-token in deze pagina. Open eerst een team of de app Opdrachten in Teams, en probeer opnieuw." : `Klassen ophalen mislukt (HTTP ${kl.status}${kl.code ? ", " + kl.code : ""}): ${kl.error || ""}`);
-      const classes = kl.value.map((c) => ({ id: c.id, displayName: c.displayName, classCode: c.classCode || "", externalName: c.externalName || "" }));
-      if (!classes.length) throw new Error("Graph geeft geen klassen terug. Ben je eigenaar van een klasteam (teamtype Klas)?");
+      voortgang("Zoeken naar de app Opdrachten in Teams…", 0);
+      const w = await TT.graphWindow("EduAssignments", { wait: 90000, onWait: (sec) => voortgang(`Open de app Opdrachten in Teams (linkerbalk). Daarin zit het token dat de extensie nodig heeft. Wachten… ${sec}s`, 0) });
+      if (!w) throw new Error("Geen Graph-token met EduAssignments gevonden. Open in Teams de app Opdrachten (linkerbalk, eventueel via ⋯ Meer apps) en probeer opnieuw.");
+      voortgang("Klassen ophalen…", 0.03);
+      let classes = [], bron = "education";
+      const kl = await TT.graph("/education/me/classes?$select=id,displayName,classCode,externalName");
+      if (kl.status === 200) classes = kl.value.map((c) => ({ id: c.id, displayName: c.displayName, classCode: c.classCode || "", externalName: c.externalName || "" }));
+      else {
+        // Zonder EduRoster: alle teams; welke een klas is blijkt uit of de opdrachten-aanroep slaagt.
+        bron = "teams";
+        const jt = await TT.graph("/me/joinedTeams?$select=id,displayName,description");
+        if (jt.status !== 200) throw new Error(`Klassen ophalen mislukt: education-API gaf HTTP ${kl.status}${kl.code ? " (" + kl.code + ")" : ""}, teams-lijst gaf HTTP ${jt.status}${jt.error ? ": " + jt.error : ""}`);
+        classes = jt.value.map((t) => ({ id: t.id, displayName: t.displayName, classCode: "", externalName: "" }));
+      }
+      if (!classes.length) throw new Error("Geen klassen of teams gevonden.");
       const members = {}, assignments = [];
-      let n = 0;
+      let n = 0, rosterOk = null;
       await TT.pool(classes, 3, async (c) => {
-        const [a, m] = await Promise.all([
-          TT.graph(`/education/classes/${c.id}/assignments`),
-          TT.graph(`/education/classes/${c.id}/members?$select=id,displayName,primaryRole`)
-        ]);
-        if (a.status === 200) for (const x of a.value) assignments.push({ id: x.id, classId: c.id, displayName: x.displayName, status: x.status, dueDateTime: x.dueDateTime, assignedDateTime: x.assignedDateTime, closeDateTime: x.closeDateTime, createdDateTime: x.createdDateTime, allowLateSubmissions: x.allowLateSubmissions, grading: x.grading ? { "@odata.type": x.grading["@odata.type"], maxPoints: x.grading.maxPoints } : null, webUrl: x.webUrl });
-        else c.fout = `opdrachten: HTTP ${a.status}`;
-        members[c.id] = m.status === 200 ? m.value.filter((u) => (u.primaryRole || "student") === "student").map((u) => ({ id: u.id, displayName: u.displayName, primaryRole: u.primaryRole })) : [];
-        voortgang(`Opdrachten van ${++n}/${classes.length} klassen…`, 0.1 + 0.2 * (n / classes.length));
+        const a = await TT.graph(`/education/classes/${c.id}/assignments`);
+        if (a.status === 200) {
+          c.klas = true;
+          for (const x of a.value) assignments.push({ id: x.id, classId: c.id, displayName: x.displayName, status: x.status, dueDateTime: x.dueDateTime, assignedDateTime: x.assignedDateTime, closeDateTime: x.closeDateTime, createdDateTime: x.createdDateTime, allowLateSubmissions: x.allowLateSubmissions, grading: x.grading ? { "@odata.type": x.grading["@odata.type"], maxPoints: x.grading.maxPoints } : null, webUrl: x.webUrl });
+        } else { c.klas = bron === "education"; c.fout = `opdrachten: HTTP ${a.status}${a.code ? " " + a.code : ""}`; }
+        if (c.klas) {
+          let m = rosterOk === false ? { status: 403 } : await TT.graph(`/education/classes/${c.id}/members?$select=id,displayName,primaryRole`);
+          if (m.status === 200) { rosterOk = true; members[c.id] = m.value.filter((u) => (u.primaryRole || "student") === "student").map((u) => ({ id: u.id, displayName: u.displayName, primaryRole: u.primaryRole })); }
+          else {
+            if (m.status === 403 || m.status === 401) rosterOk = false;
+            const [gm, go] = await Promise.all([TT.graph(`/groups/${c.id}/members?$select=id,displayName`), TT.graph(`/groups/${c.id}/owners?$select=id`)]);
+            const owners = new Set((go.value || []).map((u) => u.id));
+            members[c.id] = gm.status === 200 ? gm.value.filter((u) => !owners.has(u.id) && /user$/i.test(u["@odata.type"] || "#microsoft.graph.user")).map((u) => ({ id: u.id, displayName: u.displayName, primaryRole: "student" })) : [];
+          }
+        }
+        voortgang(`Opdrachten van ${++n}/${classes.length} ${bron === "teams" ? "teams" : "klassen"}…`, 0.05 + 0.25 * (n / classes.length));
       });
+      // Bij de teams-lijst vallen teams zonder werkende opdrachten-API (geen klasteam) weg.
+      classes = classes.filter((c) => c.klas);
+      if (!classes.length) throw new Error(bron === "teams" ? "Geen enkel team gaf opdrachten terug. Ben je eigenaar van een klasteam (teamtype Klas)?" : "Graph geeft geen klassen terug.");
       const actief = assignments.filter((a) => ["published", "assigned", "inactive"].includes(a.status));
       const submissions = {}; let k = 0;
       await TT.pool(actief, 4, async (a) => {
         const s = await TT.graph(`/education/classes/${a.classId}/assignments/${a.id}/submissions?$expand=outcomes`);
         submissions[a.id] = s.status === 200 ? s.value.map((x) => ({ id: x.id, status: x.status, submittedDateTime: x.submittedDateTime, returnedDateTime: x.returnedDateTime, reassignedDateTime: x.reassignedDateTime, excusedDateTime: x.excusedDateTime, recipient: { userId: x.recipient?.userId || x.recipient?.id || null },
           outcomes: (x.outcomes || []).filter((o) => /pointsOutcome/i.test(o["@odata.type"] || "")).map((o) => ({ "@odata.type": o["@odata.type"], points: o.points ? { points: o.points.points } : null, publishedPoints: o.publishedPoints ? { points: o.publishedPoints.points } : null })) })) : [];
+        if (s.status !== 200) a.fout = `inleveringen: HTTP ${s.status}`;
         voortgang(`Inleveringen van ${++k}/${actief.length} opdrachten…`, 0.3 + 0.6 * (k / actief.length));
       });
       // Namen van leerlingen die niet (meer) lid zijn: via $batch op /users.
@@ -51,10 +76,11 @@ TT.register({
       const namen = {};
       if (onbekend.length) {
         voortgang(`Namen ophalen (${onbekend.length})…`, 0.92);
-        const res = await TT.graphBatch(onbekend.map((id) => ({ key: id, url: `/users/${id}?$select=id,displayName` })), { prefer: "User.Read" });
+        const res = await TT.graphBatch(onbekend.map((id) => ({ key: id, url: `/users/${id}?$select=id,displayName` })));
         for (const [id, r] of res) if (r.status === 200 && r.body?.displayName) namen[id] = r.body.displayName;
       }
-      const data = { at: Date.now(), classes, members, assignments, submissions, namen, fouten: classes.filter((c) => c.fout).map((c) => `${c.displayName}: ${c.fout}`) };
+      const fouten = [...classes.filter((c) => c.fout).map((c) => `${c.displayName}: ${c.fout}`), ...actief.filter((a) => a.fout).map((a) => `${a.displayName}: ${a.fout}`)];
+      const data = { at: Date.now(), bron, rosterOk, classes: classes.map(({ id, displayName, classCode, externalName }) => ({ id, displayName, classCode, externalName })), members, assignments, submissions, namen, fouten };
       this._data = data;
       try { await chrome.storage.local.set({ ttData: data }); } catch (e) { console.warn("[TT] opslaan mislukt", e); }
       voortgang("Klaar", 1);

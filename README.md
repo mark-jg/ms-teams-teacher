@@ -1,4 +1,4 @@
-# Docent Tools voor Teams (v0.1.0)
+# Docent Tools voor Teams (v0.1.1)
 
 Chrome-extensie voor Microsoft Teams (web) voor docenten: team-overstijgende analyses van opdrachten. Alles draait lokaal in je browser; er wordt niets naar een eigen server gestuurd. Zusje van [Docent Tools voor Magister](https://github.com/mark-jg/magister-docent), met dezelfde opzet.
 
@@ -36,7 +36,11 @@ Concept- en ingeplande opdrachten tellen niet mee. Vrijstelling (excused) telt n
 
 ## Hoe het werkt
 
-De extensie gebruikt de **Microsoft Graph education-API** (`/education/me/classes`, `/education/classes/{id}/assignments`, `.../submissions?$expand=outcomes`, `.../members`), met het token dat de Teams-webclient zelf al heeft. Een script in de pagina (`content/netlog.js`) onthoudt per host het Bearer-token dat Teams meestuurt, en valt terug op de MSAL-cache van Teams in localStorage. Het token blijft in het geheugen van de pagina; de extensie krijgt alleen de antwoorden. Er worden alleen leesaanroepen gedaan (GET, en POST naar `$batch` voor namen).
+De extensie gebruikt de **Microsoft Graph education-API** (`/education/classes/{id}/assignments` en `.../submissions?$expand=outcomes`) met het token dat de Teams-webclient zelf al heeft. In Teams zit het bruikbare token (scope `EduAssignments.ReadWrite`) alleen in het frame van de **app Opdrachten** (`assignments.edu.cloud.microsoft`); de hoofdpagina heeft geen Graph-token met education-scopes. Open daarom in Teams één keer per sessie de app Opdrachten (linkerbalk, eventueel via ⋯ Meer apps); de extensie wacht daar tot anderhalve minuut op en zegt dat ook.
+
+Dat token mist `EduRoster`. Daarom gaat de klassenlijst niet via `/education/me/classes` (geeft 403) maar via je teams-lijst (`/me/joinedTeams`); een team is een klas als de opdrachten-aanroep slaagt. Leden komen uit de groepsleden minus eigenaren (`/groups/{id}/members` en `/owners`); namen van leerlingen die niet (meer) lid zijn via `$batch` op `/users`. Werkt `/education/me/classes` op jouw school wél, dan wordt die gewoon gebruikt.
+
+Een script in de pagina (`content/netlog.js`) onthoudt per host het Bearer-token dat Teams meestuurt, en valt terug op de MSAL-cache van Teams in localStorage. Het token blijft in het geheugen van de pagina; de extensie krijgt alleen de antwoorden. Er worden alleen leesaanroepen gedaan (GET, en POST naar `$batch` voor namen).
 
 De opgehaalde klassen, opdrachten en inleveringen (alleen de velden die de analyse nodig heeft) blijven in `chrome.storage.local`, zodat het overzicht de volgende keer direct opent. Standaard wordt na 6 uur opnieuw opgehaald; "Vernieuwen" kan altijd; wissen kan in de instellingen.
 
@@ -44,10 +48,9 @@ De opgehaalde klassen, opdrachten en inleveringen (alleen de velden die de analy
 
 Het zijpaneel toont onder **Koppeling** wat er aan de hand is:
 
-- *Nog geen Graph-token gezien*: Teams heeft in deze pagina nog geen aanroep naar Graph gedaan. Klik op Teams of op de app Opdrachten en controleer opnieuw.
-- *Graph-token gevonden maar zonder toegang tot de education-API (403)*: het token van de Teams-client heeft de scopes `EduAssignments`/`EduRoster` niet. Zet dan de ontwikkelaarsmodus aan, open de Inspector en kopieer het rapport; daarin staat welke tokens en API's er wél zijn (bijvoorbeeld de interne API van de app Opdrachten), zodat we die route kunnen inbouwen.
-
-Dit is de belangrijkste onzekerheid van deze eerste versie: de documentatie beschrijft de education-API, maar of het token van de Teams-webclient die mag aanroepen, blijkt pas in de praktijk op jouw school.
+- *Nog geen Graph-token gezien* of *zonder EduAssignments*: de app Opdrachten is in deze sessie nog niet open geweest. Open die in Teams en controleer opnieuw.
+- *Koppeling werkt via de teams-lijst*: normaal op scholen waar het token geen EduRoster heeft; alles werkt, alleen de klassenlijst en de leden komen uit de Teams-groepen.
+- Faalt het toch, zet dan de ontwikkelaarsmodus aan, open de Inspector en kopieer het rapport (geanonimiseerd: frames, tokens met alleen host en scopes, API-calls met alleen veldnamen). In dat rapport is ook de interne API van de app Opdrachten te zien (`assignments.edu.cloud.microsoft/api/v1.0/edu/me/work`), een mogelijke tweede route.
 
 ## Privacy
 
@@ -63,4 +66,5 @@ Dit is de belangrijkste onzekerheid van deze eerste versie: de documentatie besc
 
 ## Wijzigingen
 
+- 0.1.1: werkt met het Graph-token van de app Opdrachten (EduAssignments zonder EduRoster): klassen via de teams-lijst, leden via groepsleden; de extensie wacht tot de app Opdrachten open is en kiest het juiste frame op scopes; status in het zijpaneel legt uit wat er mist.
 - 0.1.0: eerste versie. Opdrachten over alle teams (klassen, leerlingen, opdrachten, deadlines, nakijken, signalen) via Microsoft Graph met het token van Teams zelf; Excel-export; zijpaneel met koppelingsstatus; Inspector; zelf bijwerken via GitHub Releases.

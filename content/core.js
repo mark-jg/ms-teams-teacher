@@ -149,21 +149,34 @@
       });
     },
 
-    /* Venster dat een Graph-token heeft (bij voorkeur met de gevraagde scopes). Onthouden per sessie. */
+    /* Venster dat een Graph-token heeft met de gevraagde scopes. In Teams zit dat token alleen in het
+     * frame van de app Opdrachten (assignments.edu.cloud.microsoft); de hoofdpagina heeft hooguit een
+     * Graph-token zonder education-scopes. Daarom eerst de frames met passende scopes proberen. */
     _graphWin: null,
-    async graphWindow(prefer = "EduAssignments|EduRoster") {
+    resetGraph() { TT._graphWin = null; },
+    async graphWindow(prefer = "EduAssignments", { wait = 0, onWait = null } = {}) {
+      if (TT._graphWin) { try { if (TT._graphWin.closed) TT._graphWin = null; } catch { TT._graphWin = null; } }
       if (TT._graphWin) return TT._graphWin;
-      const ws = TT.frames();
-      // Eerst dit venster zelf proberen: één snelle call.
-      const probe = async (w) => { const r = await TT.api(`${GRAPH}/me?$select=id`, { win: w, prefer, timeout: 6000 }); return r.status === 200; };
-      for (const w of [window, ...ws.filter((x) => x !== window)]) { if (await probe(w)) { TT._graphWin = w; return w; } }
+      const re = new RegExp(prefer, "i");
+      const t0 = Date.now();
+      do {
+        const info = await TT.tokensInfo();
+        const ws = TT.frames();
+        if (!info.some((f) => f.tokens.some((t) => /graph\.microsoft\.com/.test(t.host) && re.test(t.scp)))) { if (onWait) onWait(Math.round((Date.now() - t0) / 1000)); if (wait) await new Promise((res) => setTimeout(res, 2000)); continue; }
+        // Alle frames tegelijk proberen; alleen een frame dat met een token mét de gevraagde scopes antwoordt, telt.
+        const rs = await Promise.all(ws.map(async (w) => ({ w, r: await TT.api(`${GRAPH}/me?$select=id`, { win: w, prefer, timeout: 4000 }) })));
+        const hit = rs.find(({ r }) => r.status === 200 && re.test(r.scp || ""));
+        if (hit) { TT._graphWin = hit.w; return hit.w; }
+        if (onWait) onWait(Math.round((Date.now() - t0) / 1000));
+        if (wait) await new Promise((res) => setTimeout(res, 2000));
+      } while (Date.now() - t0 < wait);
       return null;
     },
 
     /* Graph-aanroep met paginering. Geeft { status, value, json, error }. */
-    async graph(path, { prefer = "EduAssignments|EduRoster", pages = true, win = null, method = "GET", body = null } = {}) {
+    async graph(path, { prefer = "EduAssignments", pages = true, win = null, method = "GET", body = null, _retry = false } = {}) {
       const w = win || (await TT.graphWindow(prefer));
-      if (!w) return { status: 0, error: "geen Graph-token gevonden in deze Teams-pagina", noToken: true };
+      if (!w) return { status: 0, error: "geen Graph-token met education-scopes gevonden; open de app Opdrachten in Teams", noToken: true };
       let url = /^https?:/.test(path) ? path : GRAPH + path;
       const value = []; let json = null; let status = 0; let guard = 0;
       while (url && guard++ < 50) {
@@ -174,6 +187,7 @@
           r = await TT.api(url, { win: w, prefer, method, body });
         }
         status = r.status;
+        if (r.noToken && !win && !_retry) { TT._graphWin = null; return TT.graph(path, { prefer, pages, win: null, method, body, _retry: true }); }
         if (r.status !== 200) return { status: r.status, error: r.error || r.json?.error?.message || `HTTP ${r.status}`, json: r.json, code: r.json?.error?.code };
         json = r.json;
         if (Array.isArray(json?.value)) value.push(...json.value);
@@ -183,7 +197,7 @@
     },
 
     /* Meerdere GET's in één keer via $batch (max 20 per batch). Geeft een Map id → { status, body }. */
-    async graphBatch(requests, { prefer = "EduAssignments|EduRoster" } = {}) {
+    async graphBatch(requests, { prefer = "EduAssignments" } = {}) {
       const out = new Map();
       const w = await TT.graphWindow(prefer);
       if (!w) return out;
