@@ -41,7 +41,13 @@ TT.register({
   huidigJaar(c) {
     const start = this.schooljaarStart(), grens = new Date(start.getFullYear(), 5, 1);
     if (c.createdDateTime && new Date(c.createdDateTime) >= grens) return true;
-    return (this._data?.assignments || []).some((a) => a.classId === c.id && [a.dueDateTime, a.assignedDateTime, a.createdDateTime].some((d) => d && new Date(d) >= start));
+    // Eén keer per dataset bepalen welke teams dit schooljaar opdrachten hebben.
+    if (this._jaarCache?.at !== this._data?.at) {
+      const set = new Set();
+      for (const a of this._data?.assignments || []) if ([a.dueDateTime, a.assignedDateTime, a.createdDateTime].some((d) => d && new Date(d) >= start)) set.add(a.classId);
+      this._jaarCache = { at: this._data?.at, set };
+    }
+    return this._jaarCache.set.has(c.id);
   },
   klasRedenen(c) {
     const r = [];
@@ -51,7 +57,10 @@ TT.register({
     if (!this.huidigJaar(c)) r.push("vorig schooljaar");
     return r;
   },
-  autoKlassen() { return new Set((this._data?.classes || []).filter((c) => !this.klasRedenen(c).length).map((c) => c.id)); },
+  autoKlassen() {
+    if (this._autoCache?.at !== this._data?.at) this._autoCache = { at: this._data?.at, set: new Set((this._data?.classes || []).filter((c) => !this.klasRedenen(c).length).map((c) => c.id)) };
+    return this._autoCache.set;
+  },
   /* Geselecteerde klassen als Set, of null voor alle. */
   selectie() {
     if (!this._data) return null;
@@ -124,7 +133,8 @@ TT.register({
       classes = classes.filter((c) => c.klas);
       if (!classes.length) throw new Error(bron === "teams" ? "Geen enkel team gaf opdrachten terug. Ben je eigenaar van een klasteam (teamtype Klas)?" : "Graph geeft geen klassen terug.");
       // Opdrachten van vóór het vorige schooljaar vallen weg: scheelt veel aanroepen en ze doen niet mee.
-      const oudGrens = new Date(this.schooljaarStart().getFullYear() - 1, 7, 1);
+      const jaren = Math.min(6, Math.max(1, TT.settings.opdrachten.schooljaren || 2));
+      const oudGrens = new Date(this.schooljaarStart().getFullYear() - (jaren - 1), 7, 1);
       const datum = (a) => new Date(a.dueDateTime || a.assignedDateTime || a.createdDateTime || 0);
       const weggelaten = assignments.filter((a) => datum(a) < oudGrens).length;
       const recent = assignments.filter((a) => datum(a) >= oudGrens);
@@ -172,13 +182,23 @@ TT.register({
     if (this._klassen?.sleutel !== sleutel) this._klassen = { sleutel, ...TT_ANALYSE.klassen(this._data, { teams: sel, patroon: TT.settings.opdrachten.klascodePatroon || "" }) };
     return this._klassen;
   },
+  /* Analyse wordt één keer per combinatie van gegevens en filters berekend; tabwissels zijn dan gratis. */
   analyse(TT) {
     const o = TT.settings.opdrachten;
     const K = this.klassen(TT);
-    return TT_ANALYSE.bouw(this._data, { periode: this._filter.periode, klassen: this.selectie(), klasVan: K.klasVan, drempelOntbreekt: o.drempelOntbreekt, drempelTeLaat: o.drempelTeLaat });
+    const sel = this.selectie();
+    const sleutel = JSON.stringify([this._data?.at, this._filter.periode, sel ? [...sel].sort() : null, K.sleutel, o.drempelOntbreekt, o.drempelTeLaat]);
+    if (this._analyseCache?.sleutel !== sleutel) this._analyseCache = { sleutel, r: TT_ANALYSE.bouw(this._data, { periode: this._filter.periode, klassen: sel, klasVan: K.klasVan, drempelOntbreekt: o.drempelOntbreekt, drempelTeLaat: o.drempelTeLaat }) };
+    return this._analyseCache.r;
   },
   /* Per afgeleide klas de totalen van haar leerlingen. */
   klasOverzicht(TT, r) {
+    if (this._klasOverzichtCache?.r === r) return this._klasOverzichtCache.uit;
+    const uit = this._klasOverzicht(TT, r);
+    this._klasOverzichtCache = { r, uit };
+    return uit;
+  },
+  _klasOverzicht(TT, r) {
     const K = this.klassen(TT);
     const perId = new Map(r.leerlingen.map((l) => [l.id, l]));
     return K.klassen.map((k) => {
@@ -202,7 +222,14 @@ TT.register({
     );
   },
   selectieLabel() { const s = this.selectie(), n = this._data?.classes.length || 0; return s ? `${s.size} van ${n} klassen` : `alle ${n} klassen`; },
-  periodeLabel() { return { schooljaar: "dit schooljaar", 30: "laatste 30 dagen", 90: "laatste 90 dagen", alles: "alles" }[this._filter.periode] || "dit schooljaar"; },
+  periodeOpties(TT) {
+    const jaren = Math.min(6, Math.max(1, TT.settings.opdrachten.schooljaren || 2));
+    const uit = [["schooljaar", "Dit schooljaar"]];
+    for (let n = 2; n <= jaren; n++) uit.push([`sj${n}`, `Laatste ${n} schooljaren`]);
+    uit.push(["90", "Laatste 90 dagen"], ["30", "Laatste 30 dagen"], ["alles", "Alles wat is opgehaald"]);
+    return uit;
+  },
+  periodeLabel() { const p = this._filter.periode; const m = /^sj(\d)$/.exec(p || ""); return m ? `laatste ${m[1]} schooljaren` : { schooljaar: "dit schooljaar", 30: "laatste 30 dagen", 90: "laatste 90 dagen", alles: "alles" }[p] || "dit schooljaar"; },
 
   /* ---------- Overzicht ---------- */
   async open(TT, { vernieuw = false, volledig = false } = {}) {
@@ -247,13 +274,19 @@ TT.register({
   close() { if (this._overlay) this._overlay.hidden = true; },
 
   render(TT) {
+    this._limiet = null;
     const r = this.analyse(TT);
     const K = this.klassen(TT);
     const views = [["groepen", "Klassen", K.klassen.length], ["klassen", "Teams", r.klassen.length], ["leerlingen", "Leerlingen", r.leerlingen.length], ["opdrachten", "Opdrachten", r.opdrachten.length], ["deadlines", "Deadlines", r.deadlines.length], ["nakijken", "Nakijken", r.nakijken.length], ["signalen", "Signalen", r.signalen.length]];
-    const tabs = TT.el("div", { class: "tt-tabs", role: "tablist" }, views.map(([id, l, n]) => TT.el("button", { class: "tt-tab" + (this._view === id ? " is-on" : ""), role: "tab", "aria-selected": String(this._view === id), onclick: () => { this._view = id; this.saveFilter(); this.render(TT); } }, [l, TT.el("span", { class: "tt-n", text: String(n) })])));
-    const periode = TT.el("select", { class: "tt-select", "aria-label": "Periode", onchange: (e) => { this._filter.periode = e.target.value; this.saveFilter(); this.render(TT); this.renderWidget(TT); } }, [["schooljaar", "Dit schooljaar"], ["90", "Laatste 90 dagen"], ["30", "Laatste 30 dagen"], ["alles", "Alles"]].map(([v, l]) => TT.el("option", { value: v, text: l })));
+    const tabs = TT.el("div", { class: "tt-tabs", role: "tablist" }, views.map(([id, l, n]) => TT.el("button", { class: "tt-tab" + (this._view === id ? " is-on" : ""), role: "tab", "aria-selected": String(this._view === id), "data-view": id, onclick: (e) => {
+      this._view = id; this.saveFilter(); this._limiet = null;
+      for (const b of tabs.querySelectorAll(".tt-tab")) { const on = b.dataset.view === id; b.classList.toggle("is-on", on); b.setAttribute("aria-selected", String(on)); }
+      this.renderBody(TT);
+    } }, [l, TT.el("span", { class: "tt-n", text: String(n) })])));
+    const periode = TT.el("select", { class: "tt-select", "aria-label": "Periode", onchange: (e) => { this._filter.periode = e.target.value; this.saveFilter(); this.render(TT); this.renderWidget(TT); } }, this.periodeOpties(TT).map(([v, l]) => TT.el("option", { value: v, text: l })));
+    if (!this.periodeOpties(TT).some(([v]) => v === this._filter.periode)) this._filter.periode = "schooljaar";
     periode.value = this._filter.periode;
-    const zoek = TT.el("input", { class: "tt-input", type: "search", placeholder: "Zoek leerling of opdracht…", "aria-label": "Zoeken", value: this._filter.zoek, oninput: (e) => { this._filter.zoek = e.target.value; this.renderBody(TT); } });
+    const zoek = TT.el("input", { class: "tt-input", type: "search", placeholder: "Zoek leerling of opdracht…", "aria-label": "Zoeken", value: this._filter.zoek, oninput: (e) => { this._filter.zoek = e.target.value; this._limiet = null; this.renderBody(TT); } });
     const sel = this.selectie(), totaal = this._data.classes.length, nSel = sel ? sel.size : totaal;
     const kiezer = TT.el("button", { class: "tt-btn", id: "tt-kiezer-knop", "aria-haspopup": "dialog", text: `Klassen: ${nSel} van ${totaal} ▾`, onclick: (e) => this.kiezer(TT, e.currentTarget) });
     if (this._filter.klas && !K.klassen.some((k) => k.naam === this._filter.klas)) this._filter.klas = null;
@@ -422,14 +455,18 @@ TT.register({
   },
 
   /* Sorteerbare tabel. cols: { k, l, n (numeriek), cls, f(row) → tekst | node | [nodes] | { v, text, cls } } */
+  _limiet: null,
   table(TT, id, cols, rows, detail, standaard) {
     if (!rows.length) return TT.el("div", { class: "tt-empty", text: this._filter.problemen ? "Geen problemen binnen deze filters." : "Niets gevonden voor deze filters." });
     const s = this._sort[id] || standaard || { k: cols[0].k, asc: !cols[0].n };
+    // Grote tabellen in porties: sorteren gebeurt over alles, tonen eerst 200 rijen.
+    const limiet = this._limiet ?? 200;
+    const totaalRijen = rows.length;
     const val = (x, c) => { const v = x[c.k]; return v == null ? (c.n ? -Infinity : "") : Array.isArray(v) ? v.join(", ") : v; };
     const sorted = [...rows].sort((a, b) => { const c = cols.find((c) => c.k === s.k) || cols[0]; const va = val(a, c), vb = val(b, c); const r = typeof va === "number" || typeof vb === "number" ? (va === -Infinity ? -1 : vb === -Infinity ? 1 : va - vb) : String(va).localeCompare(String(vb), "nl"); return s.asc ? r : -r; });
     const thead = TT.el("tr", {}, cols.map((c) => TT.el("th", { class: (c.n ? "tt-num " : "") + (s.k === c.k ? "is-sort" + (s.asc ? " is-asc" : "") : ""), onclick: () => { this._sort[id] = { k: c.k, asc: s.k === c.k ? !s.asc : !c.n }; this.renderBody(TT); } }, c.l)));
     const body = [];
-    for (const x of sorted) {
+    for (const x of sorted.slice(0, limiet)) {
       const key = id + ":" + (x.id || x.naam);
       const tr = TT.el("tr", { class: detail ? "is-click" : "", onclick: detail ? () => { this._open.has(key) ? this._open.delete(key) : this._open.add(key); this.renderBody(TT); } : null }, cols.map((c) => {
         let v = c.f ? c.f(x) : x[c.k]; let cls = (c.n ? "tt-num " : "") + (c.cls || "");
@@ -439,7 +476,13 @@ TT.register({
       body.push(tr);
       if (detail && this._open.has(key)) body.push(TT.el("tr", { class: "tt-detail" }, TT.el("td", { colspan: String(cols.length) }, detail(x))));
     }
-    return TT.el("table", { class: "tt-table" }, [TT.el("thead", {}, thead), TT.el("tbody", {}, body)]);
+    const tabel = TT.el("table", { class: "tt-table" }, [TT.el("thead", {}, thead), TT.el("tbody", {}, body)]);
+    if (totaalRijen <= limiet) return tabel;
+    return TT.el("div", {}, [tabel, TT.el("div", { class: "tt-row", style: "justify-content:center;padding:12px" }, [
+      TT.el("span", { class: "tt-muted", text: `${limiet} van ${totaalRijen} rijen` }),
+      TT.el("button", { class: "tt-btn tt-btn-sm", text: "Nog 500", onclick: () => { this._limiet = limiet + 500; this.renderBody(TT); } }),
+      TT.el("button", { class: "tt-btn tt-btn-sm", text: `Alles (${totaalRijen})`, onclick: () => { this._limiet = Infinity; this.renderBody(TT); } })
+    ])]);
   },
 
   klasTabellen(TT, r) {

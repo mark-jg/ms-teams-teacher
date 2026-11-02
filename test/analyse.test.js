@@ -121,4 +121,10 @@ assert.deepEqual(K2.klassen.map((k) => [k.naam, k.teams.length]), [["4A", 2], ["
 const r2 = A.bouw(data, { periode: "schooljaar", nu, klasVan: { u1: "4A" } });
 assert.equal(r2.leerlingen.find((l) => l.id === "u1").klas, "4A");
 
+// Laatste 2 schooljaren: op 2 nov 2026 van 1 aug 2025 tot 31 jul 2027; de oude opdracht (mei 2025) valt er net buiten.
+const [van2] = A.periodeBereik("sj2", nu);
+assert.equal(new Date(van2).getFullYear(), 2025);
+assert.equal(A.bouw(data, { periode: "sj2", nu }).totaal.opdrachten, 3);
+assert.equal(new Date(A.periodeBereik("sj3", nu)[0]).getFullYear(), 2024);
+
 console.log("analyse.test.js: alles in orde");

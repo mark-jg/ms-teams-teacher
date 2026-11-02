@@ -50,6 +50,8 @@
   <section>
     <h2>Opdrachten over alle teams <label class="switch"><input type="checkbox" data-path="opdrachten.enabled"><span></span></label></h2>
     <p>Klassen, opdrachten, inleveringen en cijfers via Microsoft Graph, met het token dat Teams zelf al heeft. De opgehaalde gegevens blijven in de lokale opslag van de extensie, zodat het overzicht de volgende keer direct opent.</p>
+    <label class="row">Schooljaren ophalen <select data-path="opdrachten.schooljaren" data-type="int"><option value="1">Alleen dit schooljaar</option><option value="2">Dit en vorig schooljaar</option><option value="3">Laatste 3 schooljaren</option><option value="4">Laatste 4 schooljaren</option></select></label>
+    <p>Minder schooljaren betekent minder aanroepen en een sneller overzicht. Een wijziging geldt bij de volgende keer bijwerken; de periodekeuze in het overzicht volgt deze instelling.</p>
     <label class="row">Standaardperiode <select data-path="opdrachten.periode"><option value="schooljaar">Dit schooljaar (1 aug – 31 jul)</option><option value="90">Laatste 90 dagen</option><option value="30">Laatste 30 dagen</option><option value="alles">Alles</option></select></label>
     <label class="row">Signaal bij ontbrekend werk vanaf <input type="number" min="1" max="50" data-path="opdrachten.drempelOntbreekt" data-type="int"> keer (over alle klassen opgeteld)</label>
     <label class="row">Signaal bij te laat inleveren vanaf <input type="number" min="1" max="50" data-path="opdrachten.drempelTeLaat" data-type="int"> keer</label>

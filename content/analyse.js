@@ -20,9 +20,10 @@
     if (keuze === "30") return [nu - 30 * DAG, Infinity];
     if (keuze === "90") return [nu - 90 * DAG, Infinity];
     if (keuze === "alles") return [-Infinity, Infinity];
+    const sj = /^sj(\d)$/.exec(String(keuze || ""));
     if (keuze && typeof keuze === "object") return [ts(keuze.begin) ?? -Infinity, keuze.einde ? ts(keuze.einde) + DAG - 1 : Infinity];
     const startJaar = d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1;
-    return [new Date(startJaar, 7, 1).getTime(), new Date(startJaar + 1, 6, 31, 23, 59, 59).getTime()];
+    return [new Date(startJaar - (sj ? +sj[1] - 1 : 0), 7, 1).getTime(), new Date(startJaar + 1, 6, 31, 23, 59, 59).getTime()];
   }
 
   /* Status van één inlevering ten opzichte van de deadline. */
