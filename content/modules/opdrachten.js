@@ -611,6 +611,7 @@ TT.register({
     this._overlay.classList.toggle("tt-native", !!this._vol);
     this._overlay.classList.toggle("tt-native-dark", !!this._vol && this.teamsDonker());
     TT.module("appbar")?.actief?.(true);
+    if (this._vol) this.inInhoud(TT); else this.uitInhoud();
     const stale = this._data && Date.now() - this._data.at > (TT.settings.opdrachten.cacheUren || 6) * 3600e3;
     if (this._data && !volledig) {
       // Oude gegevens meteen tonen; bijwerken gebeurt op de achtergrond.
@@ -641,7 +642,55 @@ TT.register({
       TT.toast(volledig ? "Alles opnieuw opgehaald" : `Bijgewerkt${this._data?.hergebruikt ? ` (${this._data.hergebruikt} opdrachten hergebruikt)` : ""}`, "ok");
     } catch (e) { status(""); TT.toast(`Bijwerken mislukt: ${e.message || e}`, "err", 5000); }
   },
-  close() { if (this._overlay) this._overlay.hidden = true; TT.module("appbar")?.actief?.(false); },
+  close() { if (this._overlay) this._overlay.hidden = true; TT.module("appbar")?.actief?.(false); this.uitInhoud(); },
+
+  /* ---- Native: de pagina neemt precies het inhoudsgebied van Teams in ----
+   * Rechts van de linkerbalk en onder de bovenbalk, zodat zoekveld, profiel en app-balk gewoon bruikbaar
+   * blijven. Het gebied wordt gemeten (role=main, anders het grootste element onder het midden van de
+   * inhoud) en volgt het venster. Kiest de gebruiker in Teams een andere app of pagina, dan sluit de
+   * pagina vanzelf, zoals bij een personal app. */
+  inhoudsGebied() {
+    const balk = TT.module("appbar")?._balk;
+    const br = balk?.getBoundingClientRect();
+    const links = br && br.width > 0 && br.width < 200 ? br.right : 0;
+    const past = (r) => r.width >= (innerWidth - links) * 0.6 && r.height >= innerHeight * 0.5 && r.left >= links - 4 && r.top >= 0 && r.top <= 140;
+    for (const el of document.querySelectorAll('[role="main"], main')) { const r = el.getBoundingClientRect(); if (past(r) && !el.closest("#tt-overlay")) return r; }
+    let beste = null;
+    try {
+      for (const el of document.elementsFromPoint(links + (innerWidth - links) / 2, innerHeight * 0.6)) {
+        if (el.closest("#tt-overlay") || el === document.body || el === document.documentElement) continue;
+        const r = el.getBoundingClientRect();
+        if (past(r) && (!beste || r.top > beste.top || (r.top === beste.top && r.width * r.height < beste.width * beste.height))) beste = r;
+      }
+    } catch {}
+    return beste || { left: links, top: 0, width: innerWidth - links, height: innerHeight };
+  },
+  inInhoud(TT) {
+    const pas = () => { if (!this._overlay || this._overlay.hidden) return; const r = this.inhoudsGebied(); Object.assign(this._overlay.style, { left: `${Math.round(r.left)}px`, top: `${Math.round(r.top)}px`, width: `${Math.round(r.width)}px`, height: `${Math.round(r.height)}px`, right: "auto", bottom: "auto" }); };
+    pas();
+    this._href = location.href;
+    clearInterval(this._inhoudTimer);
+    this._inhoudTimer = setInterval(() => {
+      if (!this._overlay || this._overlay.hidden) return;
+      // Andere pagina in Teams gekozen: de personal app wijkt.
+      if (location.href !== this._href) { this.close(); return; }
+      pas();
+    }, 700);
+    if (!this._resize) { this._resize = () => pas(); window.addEventListener("resize", this._resize); }
+    if (!this._appKlik) {
+      this._appKlik = (e) => {
+        if (!this._overlay || this._overlay.hidden || !this._vol) return;
+        const balk = TT.module("appbar")?._balk; if (!balk || !balk.contains(e.target)) return;
+        if (e.target.closest(".tt-appbar-knop")) return;
+        this.close();
+      };
+      document.addEventListener("click", this._appKlik, true);
+    }
+  },
+  uitInhoud() {
+    clearInterval(this._inhoudTimer); this._inhoudTimer = null;
+    if (this._overlay) this._overlay.style.cssText = "";
+  },
   /* Donker of licht thema van Teams zelf: gemeten aan de achtergrondkleur van de pagina. */
   teamsDonker() {
     try {
