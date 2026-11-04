@@ -17,7 +17,13 @@
 #tt-overlay.tt-native .tt-sheet { width: 100%; max-width: none; border-radius: 0; box-shadow: none; background: var(--tt-panel-bg); font-family: var(--tt-font); }
 #tt-overlay.tt-native .tt-sheet-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 20px 0; background: var(--tt-card); border-bottom: 1px solid var(--tt-line); }
 #tt-overlay.tt-native .tt-app { display: flex; align-items: center; gap: 10px; margin-right: 8px; }
-#tt-overlay.tt-native .tt-app img { width: 24px; height: 24px; border-radius: 4px; }
+#tt-overlay.tt-native .tt-app-icoon { display: block; width: 24px; height: 24px; line-height: 0; }
+#tt-overlay.tt-native .tt-kaart-icoon { display: block; width: 24px; height: 24px; color: var(--tt-accent); line-height: 0; margin-bottom: 2px; }
+#tt-overlay.tt-native .tt-kaart-actie { padding: 16px 18px; }
+#tt-overlay.tt-native .tt-bar { border-radius: 2px; height: 6px; } #tt-overlay.tt-native .tt-bar i { border-radius: 2px; }
+#tt-overlay.tt-native .tt-stip { border-radius: 2px; }
+#tt-overlay.tt-native .tt-verberg { border-radius: 4px; }
+#tt-overlay.tt-native .tt-rij-pijl { color: var(--tt-muted); }
 #tt-overlay.tt-native .tt-app h2 { margin: 0; font: 600 14px/20px var(--tt-font); letter-spacing: 0; }
 #tt-overlay.tt-native .tt-app-tabs { display: flex; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; }
 #tt-overlay.tt-native .tt-app-tab { position: relative; padding: 10px 10px 12px; border: 0; background: none; color: var(--tt-muted); font: 400 14px/20px var(--tt-font); cursor: pointer; white-space: nowrap; }

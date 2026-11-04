@@ -737,7 +737,7 @@ TT.register({
     this._tabRij = TT.el("div", { class: "tt-app-tabs", role: "tablist" }, tabKnoppen());
     this._tabKnoppen = tabKnoppen;
     const head = this._vol
-      ? TT.el("div", { class: "tt-sheet-head" }, [TT.el("div", { class: "tt-app" }, [TT.el("img", { src: chrome.runtime.getURL("icons/icon32.png"), alt: "" }), TT.el("h2", { text: "Docent Tools" })]), this._tabRij, TT.el("div", { class: "tt-app-acties" }, acties)])
+      ? TT.el("div", { class: "tt-sheet-head" }, [TT.el("div", { class: "tt-app" }, [TT.el("span", { class: "tt-app-icoon", "aria-hidden": "true", html: TT_FLUENT.app }), TT.el("h2", { text: "Docent Tools" })]), this._tabRij, TT.el("div", { class: "tt-app-acties" }, acties)])
       : TT.el("div", { class: "tt-sheet-head" }, [TT.el("h2", { text: "Docent Tools" }), ...acties]);
     const nV = this.verborgenAantal();
     const verborgen = TT.el("button", { class: "tt-btn tt-btn-sm" + (nV ? " tt-btn-accent" : ""), text: nV ? `Verborgen (${nV})` : "Verborgen", title: "Verborgen leerlingen, klassen, vakken en opdrachten terugzetten", onclick: (e) => TT.guard(() => this.verborgenBeheer(TT, e.currentTarget), "Verborgen") });
@@ -871,6 +871,7 @@ TT.register({
 
     if (pg.type === "home") {
       const kaarten = this.zonderLokaal("start:klassen", ko.filter((k) => k.leerlingen > 0), (k) => k.naam).map((k) => U.kaart([
+        TT.el("span", { class: "tt-kaart-icoon", "aria-hidden": "true", html: TT_FLUENT.klas }),
         TT.el("b", { text: k.naam }), TT.el("small", { text: `${k.leerlingen} leerlingen · ${k.aantalTeams} ${k.aantalTeams === 1 ? "vak" : "vakken"}` }),
         U.balk(k.pctIngeleverd, "ingeleverd"),
         TT.el("div", { class: "tt-row" }, [...U.chips(k), k.metSignaal > 0 ? U.chip(`${k.metSignaal} met signaal`, "bad") : null, !k.ontbreekt && !k.nakijken && !k.metSignaal ? U.chip("alles in orde", "ok") : null].filter(Boolean))
@@ -878,9 +879,9 @@ TT.register({
       const nak = r.totaal.nakijken, dl = r.deadlines.filter((o) => o.dagen <= 14).length;
       out = [
         U.sectie("Mijn werk", TT.el("div", { class: "tt-kaarten" }, [
-          U.kaart([TT.el("b", { text: String(nak) }), TT.el("small", { text: nak === 1 ? "inlevering wacht op nakijken" : "inleveringen wachten op nakijken" }), r.nakijken.length ? TT.el("span", { class: "tt-muted", text: `in ${r.nakijken.length} opdrachten · langste wachttijd ${r.nakijken[0].wachtDagen} dagen` }) : null], () => this.ga(TT, { type: "nakijken" }), null, "tt-kaart-actie"),
-          U.kaart([TT.el("b", { text: String(dl) }), TT.el("small", { text: dl === 1 ? "deadline in de komende 14 dagen" : "deadlines in de komende 14 dagen" }), r.deadlines[0] ? TT.el("span", { class: "tt-muted", text: `eerstvolgende: ${r.deadlines[0].naam} (${U.D(r.deadlines[0].due)})` }) : null], () => this.ga(TT, { type: "deadlines" }), null, "tt-kaart-actie"),
-          U.kaart([TT.el("b", { text: String(r.signalen.length) }), TT.el("small", { text: r.signalen.length === 1 ? "leerling met een signaal" : "leerlingen met een signaal" }), TT.el("span", { class: "tt-muted", text: "ontbrekend werk of te laat, over alle vakken opgeteld" })], () => this.ga(TT, { type: "signalen" }), null, "tt-kaart-actie")
+          U.kaart([TT.el("span", { class: "tt-kaart-icoon", "aria-hidden": "true", html: TT_FLUENT.nakijken }), TT.el("b", { text: String(nak) }), TT.el("small", { text: nak === 1 ? "inlevering wacht op nakijken" : "inleveringen wachten op nakijken" }), r.nakijken.length ? TT.el("span", { class: "tt-muted", text: `in ${r.nakijken.length} opdrachten · langste wachttijd ${r.nakijken[0].wachtDagen} dagen` }) : null], () => this.ga(TT, { type: "nakijken" }), null, "tt-kaart-actie"),
+          U.kaart([TT.el("span", { class: "tt-kaart-icoon", "aria-hidden": "true", html: TT_FLUENT.deadline }), TT.el("b", { text: String(dl) }), TT.el("small", { text: dl === 1 ? "deadline in de komende 14 dagen" : "deadlines in de komende 14 dagen" }), r.deadlines[0] ? TT.el("span", { class: "tt-muted", text: `eerstvolgende: ${r.deadlines[0].naam} (${U.D(r.deadlines[0].due)})` }) : null], () => this.ga(TT, { type: "deadlines" }), null, "tt-kaart-actie"),
+          U.kaart([TT.el("span", { class: "tt-kaart-icoon", "aria-hidden": "true", html: TT_FLUENT.signaal }), TT.el("b", { text: String(r.signalen.length) }), TT.el("small", { text: r.signalen.length === 1 ? "leerling met een signaal" : "leerlingen met een signaal" }), TT.el("span", { class: "tt-muted", text: "ontbrekend werk of te laat, over alle vakken opgeteld" })], () => this.ga(TT, { type: "signalen" }), null, "tt-kaart-actie")
         ])),
         U.sectie("Klassen", kaarten.length ? TT.el("div", { class: "tt-kaarten" }, kaarten) : U.leeg("Geen klassen met leerlingen in de gekozen teams."), "Klik op een klas voor de leerlingen en vakken."),
         this.rubrics(TT).rijen.some((x) => x.gedeeld) ? U.sectie("Rubrics", U.rij("Gedeelde rubric-rijen", `${this.rubrics(TT).rijen.filter((x) => x.gedeeld).length} rijen komen in meerdere vakken of opdrachten voor`, [], () => this.ga(TT, { type: "rubrics" }))) : null
@@ -1164,3 +1165,12 @@ TT.register({
     TT.toXlsx([...this.klasTabellen(TT, r), ...TT_ANALYSE.naarTabellen(r), ...this.cijferTabellen(TT), ...this.rubricTabellen(TT)], "teams-opdrachten");
   },
 });
+
+/* Fluent-achtige lijniconen (24-raster, lijndikte 1,5) voor de native weergave; in de overlay verborgen. */
+const TT_FLUENT = Object.fromEntries(Object.entries({
+  nakijken: `<path d="M9 4h6a1 1 0 0 1 1 1v1h1.5A1.5 1.5 0 0 1 19 7.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 18.5v-11A1.5 1.5 0 0 1 6.5 6H8V5a1 1 0 0 1 1-1Zm0 2h6V5H9v1Zm.5 7 2 2 3.5-4"/>`,
+  deadline: `<rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 9.5h16M8 3v4M16 3v4M9 14h2M13 14h2M9 17h2"/>`,
+  signaal: `<path d="M12 4.5 20 19H4L12 4.5Z"/><path d="M12 10v4M12 16.5v.5"/>`,
+  klas: `<circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0M15.5 5.5a3 3 0 0 1 0 5M17 13.5a5 5 0 0 1 3.5 5"/>`
+}).map(([k, d]) => [k, `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`]));
+TT_FLUENT.app = `<svg viewBox="0 0 24 24" width="24" height="24"><rect width="24" height="24" rx="6" fill="#5B5FC7"/><path d="M7 12.4l3.2 3.2L17 8.6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;

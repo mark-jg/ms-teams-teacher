@@ -1,4 +1,4 @@
-# Docent Tools voor Teams (v0.9.1)
+# Docent Tools voor Teams (v0.9.2)
 
 Chrome-extensie voor Microsoft Teams (web) voor docenten: team-overstijgende analyses van opdrachten. Alles draait lokaal in je browser; er wordt niets naar een eigen server gestuurd. Zusje van [Docent Tools voor Magister](https://github.com/mark-jg/magister-docent), met dezelfde opzet.
 
@@ -106,6 +106,7 @@ Het zijpaneel toont onder **Koppeling** wat er aan de hand is:
 
 ## Wijzigingen
 
+- 0.9.2: beeldtaal van de Teams-app-weergave gelijk aan Teams: monochroom lijnicoon in de linkerbalk met gevulde variant als de app actief is, vlak app-icoon in de merkkleur in de kopbalk, Fluent-lijniconen op de werk- en klaskaarten, rechte hoeken op balken en stippen.
 - 0.9.1: de Teams-app-weergave neemt precies het inhoudsgebied van Teams in (rechts van de linkerbalk, onder de bovenbalk), volgt het venster en sluit vanzelf als je in Teams een andere app of pagina kiest.
 - 0.9.0: native weergave als Teams-app: kopbalk met icoon, naam en tabs (Overzicht, Na te kijken, Deadlines, Signalen, Rubrics), Fluent-stijl (Segoe UI, merkkleur #5B5FC7, vlakke kaarten met 1 px rand, hoeken 4/8 px) en licht of donker zoals Teams zelf; instelling Weergave: automatisch, altijd Teams-app of altijd zwevend venster.
 - 0.8.0: icoon "Docent Tools" in de linkerbalk van Teams (gevonden via de bekende knoppen Activity, Chat, Teams en Opdrachten, dus onafhankelijk van klassenamen) dat het overzicht als volledige pagina naast de balk opent; uit te zetten als module.
