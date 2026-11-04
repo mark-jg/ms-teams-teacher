@@ -595,8 +595,11 @@ TT.register({
   /* ---------- Overzicht ---------- */
   async open(TT, { vernieuw = false, volledig = false, vol = null } = {}) {
     if (!TT.alive()) TT.meldDood();
-    // Volledige pagina naast de app-balk (via het icoon) of zwevend venster (Alt+O, zijpaneel).
-    if (vol != null) this._vol = vol;
+    // Weergave: automatisch volgt de route (icoon in de balk = native personal app, Alt+O en zijpaneel =
+    // zwevend venster), of altijd overlay, of altijd native (instelling).
+    const w = TT.settings.opdrachten.weergave || "auto";
+    if (vol != null) this._vol = w === "overlay" ? false : w === "native" ? true : vol;
+    else if (this._vol == null) this._vol = w === "native";
     if (!this._overlay) {
       this._overlay = TT.el("div", { id: "tt-overlay", role: "dialog", "aria-label": "Opdrachten over alle teams", onclick: (e) => { if (e.target === this._overlay) this.close(); } });
       document.body.append(this._overlay);
@@ -605,6 +608,8 @@ TT.register({
     }
     this._overlay.hidden = false;
     this._overlay.classList.toggle("tt-vol", !!this._vol);
+    this._overlay.classList.toggle("tt-native", !!this._vol);
+    this._overlay.classList.toggle("tt-native-dark", !!this._vol && this.teamsDonker());
     TT.module("appbar")?.actief?.(true);
     const stale = this._data && Date.now() - this._data.at > (TT.settings.opdrachten.cacheUren || 6) * 3600e3;
     if (this._data && !volledig) {
@@ -637,13 +642,25 @@ TT.register({
     } catch (e) { status(""); TT.toast(`Bijwerken mislukt: ${e.message || e}`, "err", 5000); }
   },
   close() { if (this._overlay) this._overlay.hidden = true; TT.module("appbar")?.actief?.(false); },
+  /* Donker of licht thema van Teams zelf: gemeten aan de achtergrondkleur van de pagina. */
+  teamsDonker() {
+    try {
+      for (const el of [document.body, document.documentElement, document.querySelector("#app, main, [role=main]")]) {
+        if (!el) continue;
+        const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/.exec(getComputedStyle(el).backgroundColor || "");
+        if (!m || (m[4] !== undefined && +m[4] < 0.5)) continue;
+        return (0.2126 * m[1] + 0.7152 * m[2] + 0.0722 * m[3]) / 255 < 0.5;
+      }
+    } catch {}
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  },
 
   /* ---------- Pagina's: start › klas › team › leerling ----------
    * Geen tabbladen vol getallen, maar doorklikken: van klassen naar een klas, van daar naar een vak (team)
    * of een leerling. Elke pagina laat weinig zien en verwijst door. */
   _pagina: { type: "home" }, _geschiedenis: [],
-  ga(TT, pagina) { this._geschiedenis.push(this._pagina); if (this._geschiedenis.length > 30) this._geschiedenis.shift(); this._pagina = pagina; this._limiet = null; this.renderBody(TT); this._body?.scrollTo?.(0, 0); },
-  terug(TT) { this._pagina = this._geschiedenis.pop() || { type: "home" }; this._limiet = null; this.renderBody(TT); },
+  ga(TT, pagina) { this._geschiedenis.push(this._pagina); if (this._geschiedenis.length > 30) this._geschiedenis.shift(); this._pagina = pagina; this._limiet = null; this.renderBody(TT); this.renderTabs(TT); this._body?.scrollTo?.(0, 0); },
+  terug(TT) { this._pagina = this._geschiedenis.pop() || { type: "home" }; this._limiet = null; this.renderBody(TT); this.renderTabs(TT); },
 
   render(TT) {
     this._limiet = null;
@@ -659,13 +676,20 @@ TT.register({
     zoekBox.append(zoek, resultaten);
     const sel = this.selectie(), totaal = this._data.classes.length, nSel = sel ? sel.size : totaal;
     const kiezer = TT.el("button", { class: "tt-btn tt-btn-sm", id: "tt-kiezer-knop", "aria-haspopup": "dialog", text: `Teams: ${nSel} van ${totaal} ▾`, title: "Welke teams meetellen", onclick: (e) => TT.guard(() => this.kiezer(TT, e.currentTarget), "Teams kiezen") });
-    const head = TT.el("div", { class: "tt-sheet-head" }, [
-      TT.el("h2", { text: "Docent Tools" }),
+    const acties = [
       TT.el("button", { class: "tt-btn tt-btn-sm", text: "Rapporten", title: "Rapport per leerling, afdrukbaar", onclick: () => TT.guard(() => this.rapportDialoog(TT), "Rapporten") }),
       TT.el("button", { class: "tt-btn tt-btn-sm", text: "Excel", title: "Alle overzichten in één werkmap", onclick: () => this.exportAlles(TT) }),
       TT.el("button", { class: "tt-btn tt-btn-sm", text: "Bijwerken", title: `Opgehaald ${TT.fmtDateTime(this._data.at)}. Alt+klik haalt alles opnieuw op.`, onclick: (e) => this.bijwerken(TT, { volledig: e.altKey }) }),
       TT.el("button", { class: "tt-btn tt-btn-sm", text: "Sluiten", onclick: () => this.close() })
-    ]);
+    ];
+    // Native: kop als personal app (icoon, naam, tabs voor de hoofdpagina's, acties rechts).
+    const hoofdTabs = [["home", "Overzicht"], ["nakijken", "Na te kijken"], ["deadlines", "Deadlines"], ["signalen", "Signalen"], ["rubrics", "Rubrics"]];
+    const tabKnoppen = () => hoofdTabs.map(([type, naam]) => TT.el("button", { class: "tt-app-tab" + (this._pagina.type === type || (type === "home" && ["klas", "team", "leerling"].includes(this._pagina.type)) ? " is-on" : ""), role: "tab", "data-type": type, text: naam, onclick: () => TT.guard(() => { this._geschiedenis = []; this._pagina = { type }; this._limiet = null; this.renderBody(TT); this.renderTabs(TT); }, "Tabblad") }));
+    this._tabRij = TT.el("div", { class: "tt-app-tabs", role: "tablist" }, tabKnoppen());
+    this._tabKnoppen = tabKnoppen;
+    const head = this._vol
+      ? TT.el("div", { class: "tt-sheet-head" }, [TT.el("div", { class: "tt-app" }, [TT.el("img", { src: chrome.runtime.getURL("icons/icon32.png"), alt: "" }), TT.el("h2", { text: "Docent Tools" })]), this._tabRij, TT.el("div", { class: "tt-app-acties" }, acties)])
+      : TT.el("div", { class: "tt-sheet-head" }, [TT.el("h2", { text: "Docent Tools" }), ...acties]);
     const nV = this.verborgenAantal();
     const verborgen = TT.el("button", { class: "tt-btn tt-btn-sm" + (nV ? " tt-btn-accent" : ""), text: nV ? `Verborgen (${nV})` : "Verborgen", title: "Verborgen leerlingen, klassen, vakken en opdrachten terugzetten", onclick: (e) => TT.guard(() => this.verborgenBeheer(TT, e.currentTarget), "Verborgen") });
     const tools = TT.el("div", { class: "tt-sheet-tools" }, [zoekBox, periode, kiezer, verborgen, TT.el("span", { id: "tt-bijwerk-status", class: "tt-muted", style: "margin-left:auto", "aria-live": "polite" }), TT.el("span", { class: "tt-muted", text: `opgehaald ${TT.fmtDateTime(this._data.at)}` })]);
@@ -674,6 +698,7 @@ TT.register({
     this.renderBody(TT);
   },
 
+  renderTabs(TT) { if (this._vol && this._tabRij?.isConnected && this._tabKnoppen) this._tabRij.replaceChildren(...this._tabKnoppen()); },
   /* Zoeken: leerlingen, vakken (teams) en klassen; klikken springt naar de pagina. */
   zoekLijst(TT, q, host) {
     q = q.trim().toLowerCase();

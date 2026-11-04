@@ -1,4 +1,4 @@
-# Docent Tools voor Teams (v0.8.0)
+# Docent Tools voor Teams (v0.9.0)
 
 Chrome-extensie voor Microsoft Teams (web) voor docenten: team-overstijgende analyses van opdrachten. Alles draait lokaal in je browser; er wordt niets naar een eigen server gestuurd. Zusje van [Docent Tools voor Magister](https://github.com/mark-jg/magister-docent), met dezelfde opzet.
 
@@ -17,8 +17,8 @@ Werkt ook in Edge (`edge://extensions`). Na elke update of herlaad van de extens
 
 | Functie | Hoe |
 |---|---|
-| **Icoon in de linkerbalk van Teams**: "Docent Tools" naast Activity, Chat, Teams en Opdrachten; opent het overzicht als volledige pagina naast de balk | linkerbalk (module Icoon in de linkerbalk) |
-| **Overzicht met doorklikken** (Alt+O): start met je werk (na te kijken, deadlines, signalen) en je klassen; klik door naar een klas, een vak (team) of een leerling | linkerbalk, Alt+O, zijpaneel of extensie-icoon |
+| **Icoon in de linkerbalk van Teams**: "Docent Tools" naast Activity, Chat, Teams en Opdrachten; opent het overzicht als Teams-app (personal app): kopbalk met icoon, naam en tabs, Fluent-stijl in Segoe UI met de merkkleur van Teams, licht of donker zoals Teams zelf | linkerbalk (module Icoon in de linkerbalk) |
+| **Overzicht met doorklikken** (Alt+O): start met je werk (na te kijken, deadlines, signalen) en je klassen; klik door naar een klas, een vak (team) of een leerling. Weergave instelbaar: automatisch (linkerbalk = Teams-app, Alt+O en zijpaneel = zwevend venster), altijd Teams-app of altijd zwevend venster | linkerbalk, Alt+O, zijpaneel of extensie-icoon |
 | **Klas**: leerlingen en vakken van die klas, komende deadlines | klik op een klas |
 | **Vak (team)**: opdrachten met inleverstand, klik op een opdracht voor de stand per leerling; leerlingen van dat vak | klik op een vak |
 | **Leerling**: per vak het (gewogen) gemiddelde, ontbrekend en te laat werk, de opdrachten; rubrics over vakken heen als raster (alle niveaus met omschrijving, per vak het gekozen niveau) en per opdracht het volledige rubricraster met gekozen cellen en punten; signaal | klik op een leerling of zoek de naam |
@@ -106,6 +106,7 @@ Het zijpaneel toont onder **Koppeling** wat er aan de hand is:
 
 ## Wijzigingen
 
+- 0.9.0: native weergave als Teams-app: kopbalk met icoon, naam en tabs (Overzicht, Na te kijken, Deadlines, Signalen, Rubrics), Fluent-stijl (Segoe UI, merkkleur #5B5FC7, vlakke kaarten met 1 px rand, hoeken 4/8 px) en licht of donker zoals Teams zelf; instelling Weergave: automatisch, altijd Teams-app of altijd zwevend venster.
 - 0.8.0: icoon "Docent Tools" in de linkerbalk van Teams (gevonden via de bekende knoppen Activity, Chat, Teams en Opdrachten, dus onafhankelijk van klassenamen) dat het overzicht als volledige pagina naast de balk opent; uit te zetten als module.
 - 0.7.2: rubrics per leerling als matrix (rijen × vakken) met per cel het laatst gekozen niveau en een telletje bij meerdere opdrachten; onbeoordeelde rijen weg; kleur op positie van het niveau (laagste rood, hoogste groen, ertussen neutraal); hoofdletters op rijnamen.
 - 0.7.1: leerlingpagina compacter: tabbladen Vakken en Rubrics; gedeelde rubric-rijen staan ingeklapt als één regel met per vak het gekozen niveau, het raster opent bij klikken.

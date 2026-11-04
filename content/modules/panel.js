@@ -70,6 +70,8 @@ TT.register({
     }));
     const thema = TT.el("select", { class: "tt-select", "aria-label": "Thema", onchange: (e) => TT.saveSettings({ thema: e.target.value }) }, [["auto", "Volg systeem"], ["licht", "Licht"], ["donker", "Donker"]].map(([v, l]) => TT.el("option", { value: v, text: l })));
     thema.value = TT.settings.thema || "auto";
+    const weergave = TT.el("select", { class: "tt-select", "aria-label": "Weergave van het overzicht", onchange: (e) => TT.saveSettings({ opdrachten: { weergave: e.target.value } }) }, [["auto", "Overzicht: automatisch"], ["native", "Overzicht: als Teams-app"], ["overlay", "Overzicht: zwevend venster"]].map(([v, l]) => TT.el("option", { value: v, text: l })));
+    weergave.value = TT.settings.opdrachten?.weergave || "auto";
 
     const body = TT.el("div", { class: "tt-panel-body" }, [
       widget("Koppeling", TT.el("div", {}, [status, TT.el("div", { class: "tt-row", style: "margin-top:8px" }, [
@@ -84,7 +86,7 @@ TT.register({
         ])
       ]), "Klassen, opdrachten, inleveringen en cijfers via Microsoft Graph. Blijft lokaal bewaard, zodat het overzicht de volgende keer direct opent."),
       widget("Modules", tiles),
-      widget("Weergave", TT.el("div", { class: "tt-row" }, [thema, TT.el("button", { class: "tt-btn tt-btn-sm", text: "Instellingen", onclick: () => chrome.runtime.sendMessage({ type: "openOptions" }) })])),
+      widget("Weergave", TT.el("div", { class: "tt-row" }, [thema, weergave, TT.el("button", { class: "tt-btn tt-btn-sm", text: "Instellingen", onclick: () => chrome.runtime.sendMessage({ type: "openOptions" }) })]), "Automatisch: het icoon in de linkerbalk opent als Teams-app, Alt+O en dit paneel als zwevend venster."),
       TT.settings.developer?.enabled ? widget("Ontwikkelaar", TT.el("div", { class: "tt-row" }, [
         TT.el("button", { class: "tt-btn tt-btn-sm", text: "Inspector openen", onclick: () => { this.toggle(false); TT.module("inspector")?.open(TT); } })
       ]), "Frames, tokens (alleen host en scopes) en API-calls van Teams.") : null

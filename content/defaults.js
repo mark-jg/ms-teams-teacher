@@ -2,7 +2,7 @@
  * Eén plek bewerken is genoeg. */
 globalThis.TT_DEFAULTS = {
   panel: { enabled: true, position: "right", handle: true },
-  opdrachten: { enabled: true, periode: "schooljaar", drempelOntbreekt: 2, drempelTeLaat: 3, cacheUren: 24, volledigDagen: 7, schooljaren: 2, gearchiveerd: false, alleTeams: false, klascodePatroon: "" }, // leeg = standaardpatroon (TT_KLASCODE), klascode vóór het streepje
+  opdrachten: { enabled: true, periode: "schooljaar", drempelOntbreekt: 2, drempelTeLaat: 3, cacheUren: 24, volledigDagen: 7, schooljaren: 2, weergave: "auto", gearchiveerd: false, alleTeams: false, klascodePatroon: "" }, // leeg = standaardpatroon (TT_KLASCODE), klascode vóór het streepje
   /* Rapporten: periodes "naam | begin | einde" per regel; opleidingen "CODE = Naam"; vakgroepen "Groep: vak, vak". */
   rapport: { ingesteld: false, thema: "magenta", school: "Mediacollege Amsterdam", periodes: "", opleidingen: "", vakgroepen: "", cesuur: 55, afronding: "heel", titel: "Resultaten jaar {jaar}", toelichting: "" },
   appbar: { enabled: true },

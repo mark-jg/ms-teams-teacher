@@ -1,0 +1,67 @@
+/* Native weergave: het overzicht als personal app van Teams. Waarden uit de Fluent UI v9-tokens van
+ * Teams (teamsLightTheme / teamsDarkTheme): Segoe UI, merkkleur #5B5FC7, neutrale grijzen, hoeken van
+ * 4 px (knoppen) en 8 px (kaarten), vlak met 1 px randen in plaats van schaduwen, 4 px-raster. */
+#tt-overlay.tt-native {
+  --tt-font: "Segoe UI", "Segoe UI Web (West European)", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif;
+  --tt-accent: #5B5FC7; --tt-accent-ink: #ffffff; --tt-gold: #5B5FC7;
+  --tt-ok: #0E700E; --tt-warn: #BC4B09; --tt-err: #BC2F32; --tt-info: #5B5FC7;
+  --tt-panel-bg: #F5F5F5; --tt-card: #FFFFFF; --tt-bg: #FFFFFF; --tt-fg: #242424; --tt-muted: #616161; --tt-line: #E0E0E0;
+  --tt-card-shadow: none; --tt-shadow: 0 0 2px rgba(0,0,0,.12), 0 8px 16px rgba(0,0,0,.14);
+  --tt-radius: 8px; --tt-r-knop: 4px; --tt-r-kaart: 8px;
+  background: var(--tt-panel-bg); padding: 0; backdrop-filter: none; font-family: var(--tt-font); color: var(--tt-fg);
+}
+#tt-overlay.tt-native.tt-native-dark {
+  --tt-panel-bg: #1F1F1F; --tt-card: #292929; --tt-bg: #292929; --tt-fg: #FFFFFF; --tt-muted: #ADADAD; --tt-line: #3D3D3D;
+  --tt-accent: #7F85F5; --tt-accent-ink: #000000; --tt-ok: #54B054; --tt-warn: #F7630C; --tt-err: #F1707B; --tt-info: #7F85F5;
+}
+#tt-overlay.tt-native .tt-sheet { width: 100%; max-width: none; border-radius: 0; box-shadow: none; background: var(--tt-panel-bg); font-family: var(--tt-font); }
+#tt-overlay.tt-native .tt-sheet-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 20px 0; background: var(--tt-card); border-bottom: 1px solid var(--tt-line); }
+#tt-overlay.tt-native .tt-app { display: flex; align-items: center; gap: 10px; margin-right: 8px; }
+#tt-overlay.tt-native .tt-app img { width: 24px; height: 24px; border-radius: 4px; }
+#tt-overlay.tt-native .tt-app h2 { margin: 0; font: 600 14px/20px var(--tt-font); letter-spacing: 0; }
+#tt-overlay.tt-native .tt-app-tabs { display: flex; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; }
+#tt-overlay.tt-native .tt-app-tab { position: relative; padding: 10px 10px 12px; border: 0; background: none; color: var(--tt-muted); font: 400 14px/20px var(--tt-font); cursor: pointer; white-space: nowrap; }
+#tt-overlay.tt-native .tt-app-tab:hover { color: var(--tt-fg); }
+#tt-overlay.tt-native .tt-app-tab.is-on { color: var(--tt-fg); font-weight: 600; }
+#tt-overlay.tt-native .tt-app-tab.is-on::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--tt-accent); }
+#tt-overlay.tt-native .tt-app-tab:focus-visible { outline: 2px solid var(--tt-fg); outline-offset: -2px; border-radius: 4px; }
+#tt-overlay.tt-native .tt-app-acties { display: flex; gap: 6px; align-items: center; padding-bottom: 8px; margin-left: auto; }
+#tt-overlay.tt-native .tt-sheet-tools { padding: 12px 20px 4px; }
+#tt-overlay.tt-native .tt-sheet-body { padding: 8px 20px 32px; }
+/* Bedieningselementen in Fluent-vorm */
+#tt-overlay.tt-native .tt-btn { border-radius: var(--tt-r-knop); border: 1px solid var(--tt-line); background: var(--tt-card); color: var(--tt-fg); font: 600 14px/20px var(--tt-font); padding: 5px 12px; }
+#tt-overlay.tt-native .tt-btn:hover { background: var(--tt-panel-bg); border-color: var(--tt-muted); filter: none; }
+#tt-overlay.tt-native .tt-btn-sm { font-size: 13px; padding: 4px 10px; }
+#tt-overlay.tt-native .tt-btn-primary { background: var(--tt-accent); color: var(--tt-accent-ink); border-color: var(--tt-accent); }
+#tt-overlay.tt-native .tt-btn-primary:hover { filter: brightness(.92); }
+#tt-overlay.tt-native .tt-btn-accent { background: color-mix(in srgb, var(--tt-accent) 12%, var(--tt-card)); color: var(--tt-accent); border-color: transparent; }
+#tt-overlay.tt-native .tt-select, #tt-overlay.tt-native .tt-input { border-radius: var(--tt-r-knop); border: 1px solid var(--tt-line); border-bottom-color: var(--tt-muted); background: var(--tt-card); color: var(--tt-fg); font: 400 14px/20px var(--tt-font); padding: 5px 10px; }
+#tt-overlay.tt-native .tt-input:focus, #tt-overlay.tt-native .tt-select:focus { outline: none; border-bottom: 2px solid var(--tt-accent); }
+#tt-overlay.tt-native .tt-chip { border-radius: 4px; font: 600 12px/16px var(--tt-font); padding: 2px 6px; }
+#tt-overlay.tt-native .tt-sorteer-knop { border-radius: 4px; font: 600 12px/16px var(--tt-font); }
+/* Kaarten en lijsten: vlak, rand, 8 px */
+#tt-overlay.tt-native .tt-kaart, #tt-overlay.tt-native .tt-rij, #tt-overlay.tt-native .tt-rubric, #tt-overlay.tt-native .tt-table { border-radius: var(--tt-r-kaart); border: 1px solid var(--tt-line); box-shadow: none; background: var(--tt-card); }
+#tt-overlay.tt-native .tt-kaart:hover, #tt-overlay.tt-native .tt-rij:hover { box-shadow: var(--tt-shadow); background: var(--tt-card); border-color: var(--tt-muted); }
+#tt-overlay.tt-native .tt-kaart > b { font: 600 16px/22px var(--tt-font); letter-spacing: 0; }
+#tt-overlay.tt-native .tt-kaart-actie > b, #tt-overlay.tt-native .tt-groot { font: 600 28px/36px var(--tt-font); letter-spacing: 0; }
+#tt-overlay.tt-native .tt-rij { border-radius: 4px; }
+#tt-overlay.tt-native .tt-lijst { gap: 0; border: 1px solid var(--tt-line); border-radius: var(--tt-r-kaart); overflow: hidden; background: var(--tt-card); }
+#tt-overlay.tt-native .tt-lijst .tt-rij { border: 0; border-bottom: 1px solid var(--tt-line); border-radius: 0; }
+#tt-overlay.tt-native .tt-lijst .tt-rij:last-child { border-bottom: 0; }
+#tt-overlay.tt-native .tt-lijst .tt-rij:hover { box-shadow: none; background: var(--tt-panel-bg); }
+#tt-overlay.tt-native .tt-lijst-compact { border: 0; background: none; }
+#tt-overlay.tt-native .tt-lijst-compact .tt-rij { background: var(--tt-panel-bg); border-radius: 4px; margin-bottom: 2px; border: 0; }
+#tt-overlay.tt-native .tt-detail { border-radius: 0 0 var(--tt-r-kaart) var(--tt-r-kaart); border: 1px solid var(--tt-line); border-top: 0; background: var(--tt-card); }
+#tt-overlay.tt-native .tt-pagina-kop h3 { font: 600 20px/26px var(--tt-font); letter-spacing: 0; }
+#tt-overlay.tt-native .tt-sectie h4 { font: 600 12px/16px var(--tt-font); letter-spacing: 0; text-transform: none; color: var(--tt-fg); }
+#tt-overlay.tt-native .tt-kruimel { color: var(--tt-accent); }
+#tt-overlay.tt-native .tt-table th { font: 600 12px/16px var(--tt-font); letter-spacing: 0; text-transform: none; color: var(--tt-muted); }
+#tt-overlay.tt-native .tt-table td { font-size: 14px; }
+#tt-overlay.tt-native .tt-tabs { background: transparent; padding: 0; border-bottom: 1px solid var(--tt-line); border-radius: 0; gap: 0; }
+#tt-overlay.tt-native .tt-tab { border-radius: 0; font: 400 14px/20px var(--tt-font); padding: 8px 12px; position: relative; }
+#tt-overlay.tt-native .tt-tab.is-on { background: none; box-shadow: none; font-weight: 600; color: var(--tt-fg); }
+#tt-overlay.tt-native .tt-tab.is-on::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: var(--tt-accent); }
+#tt-overlay.tt-native .tt-tab .tt-n { background: var(--tt-panel-bg); color: var(--tt-muted); border-radius: 4px; }
+#tt-overlay.tt-native .tt-signaal { border-radius: 4px; border: 1px solid color-mix(in srgb, var(--tt-err) 40%, var(--tt-line)); background: color-mix(in srgb, var(--tt-err) 8%, var(--tt-card)); }
+#tt-overlay.tt-native .tt-zoek-lijst, #tt-overlay.tt-native .tt-raster-cel { border-radius: 4px; }
+#tt-overlay.tt-native .tt-empty { color: var(--tt-muted); }
