@@ -102,5 +102,6 @@ TT.register({
 
 const TT_ICONS = Object.fromEntries(Object.entries({
   opdrachten: `<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/>`,
+  appbar: `<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 4v16M5.5 9h0M5.5 12h0M5.5 15h0"/>`,
   inspector: `<path d="M4 4h6v2H6v4H4zM14 4h6v6h-2V6h-4zM4 14h2v4h4v2H4zM18 14h2v6h-6v-2h4z"/>`
 }).map(([k, d]) => [k, `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`]));

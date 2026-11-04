@@ -5,6 +5,7 @@ globalThis.TT_DEFAULTS = {
   opdrachten: { enabled: true, periode: "schooljaar", drempelOntbreekt: 2, drempelTeLaat: 3, cacheUren: 24, volledigDagen: 7, schooljaren: 2, gearchiveerd: false, alleTeams: false, klascodePatroon: "" }, // leeg = standaardpatroon (TT_KLASCODE), klascode vóór het streepje
   /* Rapporten: periodes "naam | begin | einde" per regel; opleidingen "CODE = Naam"; vakgroepen "Groep: vak, vak". */
   rapport: { ingesteld: false, thema: "magenta", school: "Mediacollege Amsterdam", periodes: "", opleidingen: "", vakgroepen: "", cesuur: 55, afronding: "heel", titel: "Resultaten jaar {jaar}", toelichting: "" },
+  appbar: { enabled: true },
   inspector: { enabled: true },
   developer: { enabled: false },
   updates: { check: true },
@@ -14,6 +15,7 @@ globalThis.TT_DEFAULTS = {
 /* Modules met een aan/uit-schakelaar in het zijpaneel. */
 globalThis.TT_MODULES_LIST = [
   ["opdrachten", "Opdrachten", "Over alle teams heen", "#5B5FC7"],
+  ["appbar", "Icoon in de linkerbalk", "Docent Tools naast Opdrachten", "#007AFF"],
   ["inspector", "Inspector", "Frames, tokens, API-calls", "#8E8E93"]
 ];
 

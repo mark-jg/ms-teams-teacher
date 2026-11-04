@@ -1,10 +1,20 @@
 {
   "manifest_version": 3,
   "name": "Docent Tools voor Teams",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "description": "Team-overstijgende analyses voor docenten in Microsoft Teams: opdrachten, inleveringen en cijfers van al je klassen in één overzicht, met export naar Excel. Draait volledig lokaal.",
-  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
-  "permissions": ["storage", "unlimitedStorage", "clipboardWrite", "alarms"],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "clipboardWrite",
+    "alarms"
+  ],
   "host_permissions": [
     "https://teams.microsoft.com/*",
     "https://*.teams.microsoft.com/*",
@@ -18,19 +28,37 @@
   "action": {
     "default_title": "Docent Tools voor Teams",
     "default_popup": "popup/popup.html",
-    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png" }
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    }
   },
   "options_page": "options/options.html",
   "content_scripts": [
     {
-      "matches": ["https://teams.microsoft.com/*", "https://*.teams.microsoft.com/*", "https://teams.cloud.microsoft/*", "https://*.cloud.microsoft/*", "https://*.onenote.com/*"],
-      "js": ["content/netlog.js"],
+      "matches": [
+        "https://teams.microsoft.com/*",
+        "https://*.teams.microsoft.com/*",
+        "https://teams.cloud.microsoft/*",
+        "https://*.cloud.microsoft/*",
+        "https://*.onenote.com/*"
+      ],
+      "js": [
+        "content/netlog.js"
+      ],
       "run_at": "document_start",
       "all_frames": true,
       "world": "MAIN"
     },
     {
-      "matches": ["https://teams.microsoft.com/*", "https://*.teams.microsoft.com/*", "https://teams.cloud.microsoft/*", "https://*.cloud.microsoft/*", "https://*.onenote.com/*"],
+      "matches": [
+        "https://teams.microsoft.com/*",
+        "https://*.teams.microsoft.com/*",
+        "https://teams.cloud.microsoft/*",
+        "https://*.cloud.microsoft/*",
+        "https://*.onenote.com/*"
+      ],
       "js": [
         "lib/xlsx.full.min.js",
         "content/defaults.js",
@@ -38,20 +66,46 @@
         "content/analyse.js",
         "content/modules/panel.js",
         "content/modules/opdrachten.js",
+        "content/modules/appbar.js",
         "content/modules/inspector.js",
         "content/boot.js"
       ],
-      "css": ["content/base.css"],
+      "css": [
+        "content/base.css"
+      ],
       "run_at": "document_idle",
       "all_frames": true
     }
   ],
   "web_accessible_resources": [
-    { "resources": ["rapport/*"], "matches": ["https://teams.microsoft.com/*", "https://*.teams.microsoft.com/*", "https://teams.cloud.microsoft/*", "https://*.cloud.microsoft/*"] }
+    {
+      "resources": [
+        "rapport/*",
+        "icons/*"
+      ],
+      "matches": [
+        "https://teams.microsoft.com/*",
+        "https://*.teams.microsoft.com/*",
+        "https://teams.cloud.microsoft/*",
+        "https://*.cloud.microsoft/*"
+      ]
+    }
   ],
   "commands": {
-    "toggle-panel": { "suggested_key": { "default": "Alt+K" }, "description": "Docentenpaneel openen/sluiten" },
-    "open-overzicht": { "suggested_key": { "default": "Alt+O" }, "description": "Opdrachtenoverzicht over alle teams openen" }
+    "toggle-panel": {
+      "suggested_key": {
+        "default": "Alt+K"
+      },
+      "description": "Docentenpaneel openen/sluiten"
+    },
+    "open-overzicht": {
+      "suggested_key": {
+        "default": "Alt+O"
+      },
+      "description": "Opdrachtenoverzicht over alle teams openen"
+    }
   },
-  "background": { "service_worker": "background.js" }
+  "background": {
+    "service_worker": "background.js"
+  }
 }

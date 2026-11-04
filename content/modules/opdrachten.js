@@ -593,8 +593,10 @@ TT.register({
   periodeLabel() { const p = this._filter.periode; const m = /^sj(\d)$/.exec(p || ""); return m ? `laatste ${m[1]} schooljaren` : { schooljaar: "dit schooljaar", 30: "laatste 30 dagen", 90: "laatste 90 dagen", alles: "alles" }[p] || "dit schooljaar"; },
 
   /* ---------- Overzicht ---------- */
-  async open(TT, { vernieuw = false, volledig = false } = {}) {
+  async open(TT, { vernieuw = false, volledig = false, vol = null } = {}) {
     if (!TT.alive()) TT.meldDood();
+    // Volledige pagina naast de app-balk (via het icoon) of zwevend venster (Alt+O, zijpaneel).
+    if (vol != null) this._vol = vol;
     if (!this._overlay) {
       this._overlay = TT.el("div", { id: "tt-overlay", role: "dialog", "aria-label": "Opdrachten over alle teams", onclick: (e) => { if (e.target === this._overlay) this.close(); } });
       document.body.append(this._overlay);
@@ -602,6 +604,8 @@ TT.register({
       window.addEventListener("keydown", this._esc, true);
     }
     this._overlay.hidden = false;
+    this._overlay.classList.toggle("tt-vol", !!this._vol);
+    TT.module("appbar")?.actief?.(true);
     const stale = this._data && Date.now() - this._data.at > (TT.settings.opdrachten.cacheUren || 6) * 3600e3;
     if (this._data && !volledig) {
       // Oude gegevens meteen tonen; bijwerken gebeurt op de achtergrond.
@@ -632,7 +636,7 @@ TT.register({
       TT.toast(volledig ? "Alles opnieuw opgehaald" : `Bijgewerkt${this._data?.hergebruikt ? ` (${this._data.hergebruikt} opdrachten hergebruikt)` : ""}`, "ok");
     } catch (e) { status(""); TT.toast(`Bijwerken mislukt: ${e.message || e}`, "err", 5000); }
   },
-  close() { if (this._overlay) this._overlay.hidden = true; },
+  close() { if (this._overlay) this._overlay.hidden = true; TT.module("appbar")?.actief?.(false); },
 
   /* ---------- Pagina's: start › klas › team › leerling ----------
    * Geen tabbladen vol getallen, maar doorklikken: van klassen naar een klas, van daar naar een vak (team)
